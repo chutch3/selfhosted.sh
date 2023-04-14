@@ -1,4 +1,4 @@
-version: "2.3"
+version: "3"
 services:
   reverseproxy:
     image: reverseproxy
@@ -19,14 +19,43 @@ services:
       - GID=100
       - GIDLIST=100
     volumes:
-      - /mnt/common/pictures:/mnt/pictures
-      - /mnt/common/videos:/mnt/videos
+      - /media/external/pictures:/mnt/pictures
+      - /media/external/videos:/mnt/videos
     ports:
       - 8096:8096
       - 8920:8920
     restart: on-failure
     depends_on:
       - reverseproxy
+    networks:
+      - reverseproxy
+
+  homeassistant:
+    container_name: home_assistant
+    image: homeassistant/home-assistant:stable
+    labels:
+      com.centurylinklabs.watchtower.monitor-only: "true"
+    volumes:
+      #   - /opt/homeassistant:/config
+      #   - /opt/nginx-proxy-manager/database.sqlite:/tmp/database.sqlite
+      #   - /var/run/docker.sock:/var/run/docker.sock
+      #   - /home/aneisch/symlinks_for_rsync/hass-docker-ssh:/root/.ssh:ro
+      #   - /tmp/radar.gif:/tmp/radar.gif
+      #   - /sys/class/hwmon/hwmon1/temp1_input:/sys/class/thermal/thermal_zone0/temp:ro
+      - /etc/localtime:/etc/localtime:ro
+      # devices:
+      # - /dev/zigbee
+      # - /dev/usb_modem_sim7080g:/dev/cellular_modem
+    environment:
+      - TZ=America/Chicago
+    healthcheck:
+      test: 'curl -m 90 -sLf http://0.0.0.0:8123 || date >> /config/healthcheck'
+      interval: 90s
+      timeout: 60s
+      retries: 2
+    restart: always
+    logging:
+      driver: none
     networks:
       - reverseproxy
 
