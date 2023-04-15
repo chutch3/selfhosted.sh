@@ -34,7 +34,7 @@ services:
     container_name: homeassistant
     image: "ghcr.io/home-assistant/home-assistant:stable"
     volumes:
-      - ./homeassistant/config:/config
+      - ${PWD}/homeassistant/configuration.yaml:/config/configuration.yaml
       - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
     privileged: true
@@ -48,4 +48,8 @@ services:
 
 networks:
   reverseproxy:
-    external: false
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.31.0.0/16
