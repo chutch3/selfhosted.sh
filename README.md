@@ -33,8 +33,8 @@ Project status: **BETA**
 
 | Logo | Name | Description |
 |------|------|-------------|
-| ![Docker](https://www.docker.com/wp-content/uploads/2022/03/Moby-logo.png) | [Docker](https://www.docker.com) | Container runtime and orchestration |
-| ![Nginx](https://www.nginx.com/wp-content/uploads/2020/05/nginx-logo.svg) | [NGINX](https://www.nginx.com) | Reverse proxy and load balancer |
+| ![Docker](https://raw.githubusercontent.com/docker/compose/main/logo.png) | [Docker Compose](https://docs.docker.com/compose/) | Container runtime and orchestration |
+| ![Nginx](https://nginx.org/img/nginx_logo.png) | [NGINX](https://www.nginx.com) | Reverse proxy and load balancer |
 | ![Cloudflare](https://www.cloudflare.com/img/logo-cloudflare-dark.svg) | [Cloudflare](https://www.cloudflare.com) | DNS and SSL certificate management |
 | ![ACME.sh](https://github.com/acmesh-official/acme.sh/raw/master/wiki/logo.png) | [acme.sh](https://github.com/acmesh-official/acme.sh) | ACME client for SSL certificates |
 
