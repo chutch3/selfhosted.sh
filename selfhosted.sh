@@ -259,62 +259,102 @@ setup_templates() {
     done
 }
 
-# Function: show_usage
-# Description: Displays the script usage information
-# Arguments: None
-# Returns: None
-# Example: show_usage
-show_usage() {
-    echo "Usage:"
-    echo "  $0 up                        # Start all enabled services"
-    echo "  $0 down                      # Stop all services"
-    echo "  $0 rebuild                   # Rebuild all services"
-    echo "  $0 list                      # List available services"
-    echo "  $0 dropin <service>          # Drop into a service"
-    echo "  $0 tail <service>            # Tail logs for a service"
-    echo "  $0 init-certs                # Initialize certs"
-    echo "  $0 sync-certs                # Sync certs"
-    echo "  $0 enable-services           # Enable services"
-}
+# # Function: show_usage
+# # Description: Displays the script usage information
+# # Arguments: None
+# # Returns: None
+# # Example: show_usage
+# show_usage() {
+#     echo "Usage:"
+#     echo "  $0 up                        # Start all enabled services"
+#     echo "  $0 down                      # Stop all services"
+#     echo "  $0 rebuild                   # Rebuild all services"
+#     echo "  $0 list                      # List available services"
+#     echo "  $0 dropin <service>          # Drop into a service"
+#     echo "  $0 tail <service>            # Tail logs for a service"
+#     echo "  $0 init-certs                # Initialize certs"
+#     echo "  $0 sync-certs                # Sync certs"
+#     echo "  $0 enable-services           # Enable services"
+# }
 
-# Main command processing
-main() {
-    case "$1" in
-    up)
-        up
+# # Main command processing
+# main() {
+#     case "$1" in
+#     up)
+#         up
+#         ;;
+#     down)
+#         down
+#         ;;
+#     rebuild)
+#         rebuild_all_services
+#         ;;
+#     list)
+#         list_available_services
+#         ;;
+#     enable-services)
+#         enable_services
+#         ;;
+#     sync-certs)
+#         sync-certs
+#         ;;
+#     dropin)
+#         dropin "$2"
+#         ;;
+#     tail)
+#         tail "$2"
+#         ;;
+#     init-certs)
+#         initialize_certs
+#         ;;
+#     make-dhparam)
+#         make_dhparam
+#         ;;
+#     *)
+#         show_usage
+#         exit 1
+#         ;;
+#     esac
+# }
+
+# main "$@"
+
+
+#!/bin/bash
+
+# Load common functions and variables
+source "scripts/common.sh"
+source "scripts/machines.sh"
+
+# Load deployment target implementations
+for target in scripts/deployments/*.sh; do
+    source "$target"
+done
+
+# Main command router
+case "$1" in
+    # Common commands
+    init-certs) init_certs ;;
+    list) list_available_services ;;
+    sync-files) sync-files ;;
+    # Deployment target specific commands
+    compose|swarm|k8s|machines)
+        target="$1"
+        cmd="$2"
+        shift 2  # Remove target and command from args
+        
+        if command_exists "${target}_${cmd}"; then
+            "${target}_${cmd}" "$@"
+        else
+            echo "Unknown command '$cmd' for target '$target'"
+            echo "Available commands for $target:"
+            list_commands "$target"
+            exit 1
+        fi
         ;;
-    down)
-        down
-        ;;
-    rebuild)
-        rebuild_all_services
-        ;;
-    list)
-        list_available_services
-        ;;
-    enable-services)
-        enable_services
-        ;;
-    sync-certs)
-        sync-certs
-        ;;
-    dropin)
-        dropin "$2"
-        ;;
-    tail)
-        tail "$2"
-        ;;
-    init-certs)
-        initialize_certs
-        ;;
-    make-dhparam)
-        make_dhparam
-        ;;
-    *)
-        show_usage
+    *) 
+        echo "Usage: $0 {compose|swarm|k8s|machines} command [args...]"
+        echo "Or: $0 {init-certs|list|sync-files}"
         exit 1
         ;;
-    esac
-}
-
-main "$@"
+esac
