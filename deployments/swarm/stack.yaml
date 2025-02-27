@@ -1,0 +1,16 @@
+# Convert existing compose file for swarm
+version: '3.8'
+services:
+  reverseproxy:
+    image: nginx:alpine
+    deploy:
+      mode: global  # Run on all nodes
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - reverseproxy
+
+networks:
+  reverseproxy:
+    driver: overlay  # Enable cross-node communication
