@@ -342,7 +342,7 @@ case "$1" in
         target="$1"
         cmd="$2"
         shift 2  # Remove target and command from args
-        
+
         if command_exists "${target}_${cmd}"; then
             "${target}_${cmd}" "$@"
         else
@@ -352,7 +352,7 @@ case "$1" in
             exit 1
         fi
         ;;
-    *) 
+    *)
         echo "Usage: $0 {compose|swarm|k8s|machines} command [args...]"
         echo "Or: $0 {init-certs|list|sync-files}"
         exit 1
