@@ -1,10 +1,6 @@
 #!/bin/bash
+source scripts/ssh.sh
 
-SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/.ssh/selfhosted_rsa}"
-SSH_TIMEOUT="${SSH_TIMEOUT:-5}"
-
-export SSH_KEY_FILE
-export SSH_TIMEOUT
 
 # Parse machine configuration from YAML file
 # Args:
@@ -155,27 +151,27 @@ machines_setup_ssh() {
         echo "Setting up SSH access for $host (user: $ssh_user)..."
         
         # Create .ssh directory with correct permissions on remote host
-        if ! ssh -i "$key_file" -o PasswordAuthentication=yes "$ssh_user@$host" \
+        if ! ssh_password_auth "$ssh_user@$host" \
             "mkdir -p ~/.ssh && chmod 700 ~/.ssh"; then
             echo "Failed to create/fix permissions on .ssh directory for $host" >&2
             return 1
         fi
         
         # Copy SSH key and set permissions
-        if ! ssh-copy-id -i "$key_file" -o PasswordAuthentication=yes "$ssh_user@$host"; then
+        if ! ssh_copy_id "$ssh_user@$host"; then
             echo "Failed to copy SSH key to $host" >&2
             return 1
         fi
         
         # Verify and fix permissions on authorized_keys
-        if ! ssh -i "$key_file" "$ssh_user@$host" \
+        if ! ssh_key_auth "$ssh_user@$host" \
             "chmod 600 ~/.ssh/authorized_keys"; then
             echo "Failed to fix permissions on authorized_keys for $host" >&2
             return 1
         fi
         
         # Test the connection
-        if ! timeout 5 ssh -i "$key_file" -o PasswordAuthentication=no "$ssh_user@$host" exit; then
+        if ! timeout 5 ssh_key_auth "$ssh_user@$host" exit; then
             echo "Failed to verify SSH key access to $host" >&2
             return 1
         fi
@@ -186,19 +182,8 @@ machines_setup_ssh() {
     echo "SSH setup completed successfully for all hosts"
 }
 
-# SSH wrapper that uses the SSH key file and timeout
-# Args:
-#   $1: SSH user@hostname
-#   $2: Command to run
-# Returns:
-#   None
-ssh_wrapper() {
-    ssh -v -i "$SSH_KEY_FILE" "$1" "$2"
-}
 
-# Export the ssh_wrapper function so it's available to subshells
-export -f ssh_wrapper
-
+# TODO: This does not work when trying to connect to another machine
 # Test SSH connectivity to all machines
 # No args
 # Returns:
@@ -208,8 +193,10 @@ machines_test_connection() {
     hosts="$(machines_parse workers)"
     local timeout=$SSH_TIMEOUT
     for host in $hosts; do
+        local ssh_user
+        ssh_user="$(machines_get_ssh_user "$host")"
         echo "Testing connection to $host..."
-        if timeout "$timeout" bash -c "ssh_wrapper \"$host\" exit"; then
+        if timeout "$timeout" bash -c "ssh_key_auth \"$ssh_user@$host\" exit"; then
             echo "✓ Successfully connected to $host"
         else
             local status=$?

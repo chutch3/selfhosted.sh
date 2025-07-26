@@ -334,7 +334,7 @@ done
 # Main command router
 case "$1" in
     # Common commands
-    init-certs) init_certs ;;
+    init-certs) ensure_certs_exist ;;
     list) list_available_services ;;
     sync-files) sync-files ;;
     # Deployment target specific commands
