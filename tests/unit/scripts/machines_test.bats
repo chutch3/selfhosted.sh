@@ -157,16 +157,17 @@ EOF
 }
 
 @test "machines_test_connection checks all hosts" {
+    # Mock SSH wrappers and timeout
+    ssh_key_auth() {
+        echo "SSH key auth called with args: $*" >&2
+        return 0
+    }
+    
     timeout() {
         "${@:2}"
     }
     
-    ssh() {
-        echo "Mock SSH called with args: $*" >&2
-        return 0
-    }
-    
-    export -f timeout ssh
+    export -f ssh_key_auth timeout
     
     run machines_test_connection
     echo "output: $output" >&2
@@ -176,16 +177,16 @@ EOF
 }
 
 @test "machines_test_connection shows failure for failed connections" {
+    ssh_key_auth() {
+        echo "SSH key auth called with args: $*" >&2
+        return 1
+    }
+    
     timeout() {
         "${@:2}"
     }
     
-    ssh() {
-        echo "Mock SSH called with args: $*" >&2
-        return 1
-    }
-    
-    export -f timeout ssh
+    export -f ssh_key_auth timeout
     
     run machines_test_connection
     echo "output: $output" >&2
@@ -244,19 +245,24 @@ EOF
 }
 
 @test "machines_setup_ssh handles permissions" {
-    # Mock all commands that interact with the system
+    # Mock all SSH-related commands
     chmod() {
         echo "Setting permissions $1 on $2" >&2
         return 0
     }
     
-    ssh() {
-        echo "SSH: $*" >&2
+    ssh_password_auth() {
+        echo "Password auth called with args: $*" >&2
         return 0
     }
     
-    ssh-copy-id() {
-        echo "Copying key: $*" >&2
+    ssh_key_auth() {
+        echo "Key auth called with args: $*" >&2
+        return 0
+    }
+    
+    ssh_copy_id() {
+        echo "Copy ID called with args: $*" >&2
         return 0
     }
     
@@ -264,7 +270,7 @@ EOF
         "${@:2}"
     }
     
-    export -f chmod ssh ssh-copy-id timeout
+    export -f chmod ssh_password_auth ssh_key_auth ssh_copy_id timeout
     
     run machines_setup_ssh
     echo "Output: $output" >&2
@@ -278,7 +284,25 @@ EOF
     hostname() {
         echo "manager.example.com"
     }
+    export -f hostname
+
+    machines_my_ip() {
+        echo "10.0.0.1"
+    }
+    export -f machines_my_ip
     
+    # Mock machines_get_host_ip to handle IP resolution
+    machines_get_host_ip() {
+        case "$1" in
+            "manager.example.com") echo "10.0.0.1" ;;
+            "worker1.example.com") echo "10.0.0.2" ;;
+            "worker2.example.com") echo "10.0.0.3" ;;
+            *) return 1 ;;
+        esac
+    }
+    export -f machines_get_host_ip
+    
+    # Mock other commands
     ssh() {
         echo "SSH: $*" >&2
         return 0
@@ -293,11 +317,13 @@ EOF
         "${@:2}"
     }
     
-    export -f hostname ssh ssh-copy-id timeout
+    export -f ssh ssh-copy-id timeout
     
     run machines_setup_ssh
     echo "Output: $output" >&2
+    
     [ "$status" -eq 0 ]
     [[ "$output" =~ "Skipping SSH setup for local machine: manager.example.com" ]]
     [[ "$output" =~ "Setting up SSH access for worker1.example.com" ]]
 }
+

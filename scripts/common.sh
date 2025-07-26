@@ -20,14 +20,26 @@ list_commands() {
 
 # Common functions used across deployment targets
 load_env() {
-    if [ -f "$PROJECT_ROOT/.env" ]; then
-        source "$PROJECT_ROOT/.env"
+    if [ ! -f "$PROJECT_ROOT/.env" ]; then
+        echo "❌ Error: .env file not found in $PROJECT_ROOT"
+        exit 1
     fi
+
+    source "$PROJECT_ROOT/.env"
 }
 
-init_certs() {
-    # Common certificate initialization logic
-    echo "Initializing certificates..."
+ensure_certs_exist() {
+    # check if certs are already initialized
+    if [ -d "$PROJECT_ROOT/certs" ]; then
+        echo "✅ Certificates are already initialized"
+        return
+    fi
+
+    load_env
+
+    docker compose up --build -d acme
+    docker exec -it acme.sh /bin/sh -c "acme.sh --upgrade"
+    docker exec --env-file .env -it acme.sh /bin/sh -c "acme.sh --issue --dns dns_cf -d ${BASE_DOMAIN} -d ${WILDCARD_DOMAIN} --server letsencrypt || true"
 }
 
 list_available_services() {
