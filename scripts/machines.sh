@@ -26,7 +26,7 @@ machines_parse() {
     # Run yq and capture both stdout and stderr
     local output
     output=$(yq "$key" "$machines_file" 2>&1)
-    
+
     # Check yq exit status
     if [ $? -ne 0 ]; then
         echo "Error: Invalid YAML in $machines_file" >&2
@@ -46,22 +46,22 @@ machines_parse() {
 machines_get_ssh_user() {
     local host=$1
     local machines_file="${MACHINES_FILE:-$PROJECT_ROOT/machines.yml}"
-    
+
     if [ ! -f "$machines_file" ]; then
         echo "Error: Machines file not found at $machines_file" >&2
         return 1
     fi
-    
+
     local user
     # Strip quotes from output since yq adds them
     user=$(yq ".machines[] | select(.host == \"$host\") | .ssh_user" "$machines_file" | tr -d '"')
-    
+
     # Handle case where host isn't found - yq will output empty string
     if [ -z "$user" ]; then
         echo "null"
         return 0
     fi
-    
+
     echo "$user"
 }
 
@@ -98,12 +98,12 @@ machines_get_host_ip() {
     # Otherwise resolve hostname to IP
     local ip
     ip=$(getent hosts "$host" | awk '{ print $1 }')
-    
+
     if [ -z "$ip" ]; then
         echo "Error: Could not resolve IP for host: $host" >&2
         return 1
     fi
-    
+
     echo "$ip"
 }
 
@@ -115,7 +115,7 @@ machines_get_host_ip() {
 machines_setup_ssh() {
     local key_file="$SSH_KEY_FILE"
     local current_machine_ip=$(machines_my_ip)
-    
+
     # Generate SSH key if it doesn't exist
     if [ ! -f "$key_file" ]; then
         echo "Generating new SSH key at $key_file..."
@@ -124,15 +124,15 @@ machines_setup_ssh() {
             return 1
         fi
     fi
-    
+
     # Fix local key file permissions
     chmod 600 "$key_file"
     chmod 644 "${key_file}.pub"
-    
+
     # Get all hosts
     local hosts
     hosts="$(machines_parse all)"
-    
+
     for host in $hosts; do
         local current_host_ip=$(machines_get_host_ip "$host")
         # Skip if this is the local machine
@@ -140,45 +140,45 @@ machines_setup_ssh() {
             echo "Skipping SSH setup for local machine: $host"
             continue
         fi
-        
+
         local ssh_user
         ssh_user=$(machines_get_ssh_user "$host")
         if [ "$ssh_user" = "null" ]; then
             ssh_user=${USER}
             echo "No SSH user specified for $host, using current user: $ssh_user"
         fi
-        
+
         echo "Setting up SSH access for $host (user: $ssh_user)..."
-        
+
         # Create .ssh directory with correct permissions on remote host
         if ! ssh_password_auth "$ssh_user@$host" \
             "mkdir -p ~/.ssh && chmod 700 ~/.ssh"; then
             echo "Failed to create/fix permissions on .ssh directory for $host" >&2
             return 1
         fi
-        
+
         # Copy SSH key and set permissions
         if ! ssh_copy_id "$ssh_user@$host"; then
             echo "Failed to copy SSH key to $host" >&2
             return 1
         fi
-        
+
         # Verify and fix permissions on authorized_keys
         if ! ssh_key_auth "$ssh_user@$host" \
             "chmod 600 ~/.ssh/authorized_keys"; then
             echo "Failed to fix permissions on authorized_keys for $host" >&2
             return 1
         fi
-        
+
         # Test the connection
         if ! timeout 5 ssh_key_auth "$ssh_user@$host" exit; then
             echo "Failed to verify SSH key access to $host" >&2
             return 1
         fi
-        
+
         echo "✓ Successfully set up SSH access for $host"
     done
-    
+
     echo "SSH setup completed successfully for all hosts"
 }
 

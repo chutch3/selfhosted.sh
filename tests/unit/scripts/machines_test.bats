@@ -6,24 +6,24 @@ setup() {
 
     # Create temporary test directory
     TEST_TEMP_DIR="$(temp_make)"
-    
+
     # Set up test environment variables
     export TEST=true
     export PROJECT_ROOT="${TEST_TEMP_DIR}"
-    
+
     # Create test machines.yml file with new format
     cat > "${TEST_TEMP_DIR}/machines.yml" <<EOF
 machines:
   - host: manager.example.com
     role: manager
     ssh_user: admin1
-  
+
   - host: worker1.example.com
     role: worker
     ssh_user: admin2
     labels:
       storage: ssd
-  
+
   - host: worker2.example.com
     role: worker
     ssh_user: admin3
@@ -33,7 +33,7 @@ EOF
 
     # Source the machines script with mocked functions
     source "${BATS_TEST_DIRNAME}/../../../scripts/machines.sh"
-    
+
     # Mock getent to return test IPs
     getent() {
         case "$2" in
@@ -61,7 +61,7 @@ teardown() {
     echo "output: $output"
     [ "$status" -eq 0 ]
     [ "$output" = "manager.example.com" ]
-    
+
     run machines_parse 'workers'
     echo "output: $output"
     [ "$status" -eq 0 ]
@@ -121,18 +121,18 @@ EOF
         echo "SSH: $*" >&2
         return 0
     }
-    
+
     ssh-copy-id() {
         echo "Copying key: $*" >&2
         return 0
     }
-    
+
     timeout() {
         "${@:2}"
     }
-    
+
     export -f ssh ssh-copy-id timeout
-    
+
     run machines_setup_ssh
     echo "output: $output" >&2
     [ "$status" -eq 0 ]
@@ -143,14 +143,14 @@ EOF
     ssh() {
         return 0
     }
-    
+
     ssh-copy-id() {
         echo "Failed to copy key" >&2
         return 1
     }
-    
+
     export -f ssh ssh-copy-id
-    
+
     run machines_setup_ssh
     [ "$status" -eq 1 ]
     [[ "$output" =~ "Failed to copy SSH key" ]]
@@ -162,13 +162,13 @@ EOF
         echo "SSH key auth called with args: $*" >&2
         return 0
     }
-    
+
     timeout() {
         "${@:2}"
     }
-    
+
     export -f ssh_key_auth timeout
-    
+
     run machines_test_connection
     echo "output: $output" >&2
     [ "$status" -eq 0 ]
@@ -181,13 +181,13 @@ EOF
         echo "SSH key auth called with args: $*" >&2
         return 1
     }
-    
+
     timeout() {
         "${@:2}"
     }
-    
+
     export -f ssh_key_auth timeout
-    
+
     run machines_test_connection
     echo "output: $output" >&2
     [ "$status" -eq 1 ]
@@ -197,15 +197,15 @@ EOF
 
 @test "machines_get_ssh_user gets user for host" {
     MACHINES_FILE="${TEST_TEMP_DIR}/machines.yml"
-    
+
     run machines_get_ssh_user "manager.example.com"
     [ "$status" -eq 0 ]
     [ "$output" = "admin1" ]
-    
+
     run machines_get_ssh_user "worker1.example.com"
     [ "$status" -eq 0 ]
     [ "$output" = "admin2" ]
-    
+
     run machines_get_ssh_user "worker2.example.com"
     [ "$status" -eq 0 ]
     [ "$output" = "admin3" ]
@@ -222,7 +222,7 @@ machines:
 EOF
 
     MACHINES_FILE="${TEST_TEMP_DIR}/machines.yml"
-    
+
     run machines_get_ssh_user "manager.example.com"
     [ "$status" -eq 0 ]
     [ "$output" = "null" ]  # yq returns "null" for missing fields
@@ -230,7 +230,7 @@ EOF
 
 @test "machines_get_ssh_user handles invalid host" {
     MACHINES_FILE="${TEST_TEMP_DIR}/machines.yml"
-    
+
     run machines_get_ssh_user "nonexistent"
     [ "$status" -eq 0 ]
     [ "$output" = "null" ]
@@ -238,7 +238,7 @@ EOF
 
 @test "machines_get_ssh_user handles missing file" {
     MACHINES_FILE="/nonexistent/path/machines.yml"
-    
+
     run machines_get_ssh_user "manager"
     [ "$status" -eq 1 ]
     [[ "$output" =~ "Error" ]]
@@ -250,28 +250,28 @@ EOF
         echo "Setting permissions $1 on $2" >&2
         return 0
     }
-    
+
     ssh_password_auth() {
         echo "Password auth called with args: $*" >&2
         return 0
     }
-    
+
     ssh_key_auth() {
         echo "Key auth called with args: $*" >&2
         return 0
     }
-    
+
     ssh_copy_id() {
         echo "Copy ID called with args: $*" >&2
         return 0
     }
-    
+
     timeout() {
         "${@:2}"
     }
-    
+
     export -f chmod ssh_password_auth ssh_key_auth ssh_copy_id timeout
-    
+
     run machines_setup_ssh
     echo "Output: $output" >&2
     [ "$status" -eq 0 ]
@@ -290,7 +290,7 @@ EOF
         echo "10.0.0.1"
     }
     export -f machines_my_ip
-    
+
     # Mock machines_get_host_ip to handle IP resolution
     machines_get_host_ip() {
         case "$1" in
@@ -301,29 +301,28 @@ EOF
         esac
     }
     export -f machines_get_host_ip
-    
+
     # Mock other commands
     ssh() {
         echo "SSH: $*" >&2
         return 0
     }
-    
+
     ssh-copy-id() {
         echo "Copying key: $*" >&2
         return 0
     }
-    
+
     timeout() {
         "${@:2}"
     }
-    
+
     export -f ssh ssh-copy-id timeout
-    
+
     run machines_setup_ssh
     echo "Output: $output" >&2
-    
+
     [ "$status" -eq 0 ]
     [[ "$output" =~ "Skipping SSH setup for local machine: manager.example.com" ]]
     [[ "$output" =~ "Setting up SSH access for worker1.example.com" ]]
 }
-

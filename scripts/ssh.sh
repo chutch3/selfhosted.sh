@@ -5,7 +5,7 @@ SSH_TIMEOUT="${SSH_TIMEOUT:-5}"
 export SSH_KEY_FILE
 export SSH_TIMEOUT
 
-# SSH wrapper that uses the SSH key file. It's 
+# SSH wrapper that uses the SSH key file. It's
 # a bit more opinionated than the default ssh command.
 # Args:
 #   $1: SSH user@hostname
