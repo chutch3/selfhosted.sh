@@ -1,0 +1,13 @@
+machines:
+  - host: pc.diyhub.dev
+    role: manager
+    ssh_user: cody
+  - host: imac.diyhub.dev
+    role: worker
+    ssh_user: chutchens
+  # - host: mini.diyhub.dev
+  #   role: worker
+  #   ssh_user: chutchens
+  - host: giant.diyhub.dev
+    role: worker
+    ssh_user: chutchens

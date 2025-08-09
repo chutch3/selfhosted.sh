@@ -1,3 +1,4 @@
+#!/bin/bash
 
 SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/.ssh/selfhosted_rsa}"
 SSH_TIMEOUT="${SSH_TIMEOUT:-5}"
@@ -14,10 +15,13 @@ export SSH_TIMEOUT
 #   None
 ssh_key_auth() {
     local key_file="$SSH_KEY_FILE"
-    ssh -i "$key_file" \
+    local timeout_duration="${SSH_TIMEOUT:-5}"
+    
+    timeout "$timeout_duration" ssh -i "$key_file" \
         -o PasswordAuthentication=no \
         -o PubkeyAuthentication=yes \
         -o IdentitiesOnly=yes \
+        -o ConnectTimeout=5 \
         "$1" "$2"
 }
 

@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Source wrapper interfaces for external dependencies
+source scripts/wrappers/docker_wrapper.sh
+source scripts/wrappers/ssh_wrapper.sh
+source scripts/wrappers/file_wrapper.sh
 source scripts/ssh.sh
 
 
@@ -9,10 +13,10 @@ swarm_create_ssl_secrets() {
     echo "Creating swarm secrets for $BASE_DOMAIN"
 
     # Create Docker secrets from your existing cert files
-    docker secret create "ssl_full.pem" "${PROJECT_ROOT}/certs/${BASE_DOMAIN}_ecc/fullchain.cer"
-    docker secret create "ssl_key.pem" "${PROJECT_ROOT}/certs/${BASE_DOMAIN}_ecc/${BASE_DOMAIN}.key"
-    docker secret create "ssl_ca.pem" "${PROJECT_ROOT}/certs/${BASE_DOMAIN}_ecc/ca.cer"
-    docker secret create "ssl_dhparam.pem" "${PROJECT_ROOT}/certs/dhparam.pem"
+    docker_secret_create "ssl_full.pem" "${PROJECT_ROOT}/certs/${BASE_DOMAIN}_ecc/fullchain.cer"
+    docker_secret_create "ssl_key.pem" "${PROJECT_ROOT}/certs/${BASE_DOMAIN}_ecc/${BASE_DOMAIN}.key"
+    docker_secret_create "ssl_ca.pem" "${PROJECT_ROOT}/certs/${BASE_DOMAIN}_ecc/ca.cer"
+    docker_secret_create "ssl_dhparam.pem" "${PROJECT_ROOT}/certs/dhparam.pem"
 }
 
 
@@ -27,8 +31,8 @@ swarm_initialize_manager() {
     echo "Resolved manager IP: $MANAGER_IP"
 
     # Initialize swarm
-    docker swarm init --advertise-addr "$MANAGER_IP"
-    docker swarm join-token -q worker > .swarm_token
+    docker_swarm_init "$MANAGER_IP"
+    docker_swarm_get_worker_token > .swarm_token
 }
 
 
@@ -54,21 +58,30 @@ swarm_initialize_cluster() {
 # Join a node to the swarm
 swarm_add_worker_node() {
     local host=$1
-    local token=$(cat .swarm_token)
-    local manager_host=$(machines_parse manager)
-    local manager_ip=$(machines_get_host_ip "$manager_host")
+    local token
+    local manager_host
+    local manager_ip
+    local ssh_user
 
-    echo "Joining node $host ($host_ip) to swarm..."
-    ssh_key_auth "$host" "docker swarm join --token $token ${manager_ip}:2377"
+    token=$(file_read .swarm_token)
+    manager_host=$(machines_parse manager)
+    manager_ip=$(machines_get_host_ip "$manager_host")
+    ssh_user=$(machines_get_ssh_user "$host")
+
+    if [ "$ssh_user" = "null" ]; then
+        ssh_user=${USER}
+    fi
+
+    echo "Joining node $host to swarm..."
+    ssh_docker_command "$ssh_user@$host" "docker swarm join --token $token ${manager_ip}:2377"
 }
 
 # Ongoing maintenance of swarm nodes
-# TODO: SSH key auth needs to know the user
 swarm_sync_node_configuration() {
     echo "Syncing swarm nodes with machines.yml configuration..."
 
     # Get current worker nodes from swarm
-    current_nodes=$(docker node ls --format '{{.Hostname}}' | grep -v "$(machines_parse manager)")
+    current_nodes=$(docker_node_list '{{.Hostname}}' | grep -v "$(machines_parse manager)")
     echo "Current nodes: $current_nodes"
 
     # Get desired worker nodes from machines.yml
@@ -79,16 +92,21 @@ swarm_sync_node_configuration() {
     for node in $current_nodes; do
         if ! echo "$desired_nodes" | grep -q "$node"; then
             echo "Removing node $node from swarm..."
-            docker node update --availability drain "$node"
+            docker_node_update_availability "drain" "$node"
             sleep 5  # Wait for services to drain
-            docker node rm --force "$node"
-            ssh_key_auth "$node" "docker swarm leave --force"
+            docker_node_remove "$node" "--force"
+            local ssh_user
+            ssh_user=$(machines_get_ssh_user "$node")
+            if [ "$ssh_user" = "null" ]; then
+                ssh_user=${USER}
+            fi
+            ssh_docker_command "$ssh_user@$node" "docker swarm leave --force"
         fi
     done
 
     # Add new nodes
     for node in $desired_nodes; do
-        if ! docker node ls --format '{{.Hostname}}' | grep -q "$node"; then
+        if ! docker_node_list '{{.Hostname}}' | grep -q "$node"; then
             echo "Adding new node $node to swarm..."
             swarm_add_worker_node "$node"
         fi
@@ -98,16 +116,16 @@ swarm_sync_node_configuration() {
     for node in $desired_nodes; do
         echo "Updating labels for node $node..."
         # Remove existing labels
-        current_labels=$(docker node inspect "$node" --format '{{range $k,$v := .Spec.Labels}}{{$k}}{{end}}')
+        current_labels=$(docker_node_inspect "$node" "{{range \$k,\$v := .Spec.Labels}}{{\$k}}{{end}}")
         for label in $current_labels; do
-            docker node update --label-rm "$label" "$node"
+            docker_node_update_label "--label-rm" "$label" "$node"
         done
 
         # Add new labels
         labels=$(machines_parse ".workers[] | select(.host == \"$node\") | .labels")
         if [ -n "$labels" ]; then
             for label in $labels; do
-                docker node update --label-add "$label" "$node"
+                docker_node_update_label "--label-add" "$label" "$node"
             done
         fi
     done
@@ -118,8 +136,8 @@ swarm_sync_node_configuration() {
 
 swarm_display_status() {
     echo "Swarm Nodes:"
-    docker node ls
+    docker_node_list
 
     echo -e "\nSwarm Services:"
-    docker service ls
+    docker_service_list
 }
