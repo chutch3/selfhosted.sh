@@ -61,7 +61,8 @@ EOF
 }
 
 # Function: generate_nginx_from_services
-# Description: Generates nginx template files from services.yaml
+# Description: Generates nginx template files from services.yaml with hybrid approach
+# Supports: default templates, inline config, and external template references
 # Arguments: None
 # Returns: 0 on success, 1 on failure
 generate_nginx_from_services() {
@@ -75,20 +76,40 @@ generate_nginx_from_services() {
     # Create nginx directory
     mkdir -p "$GENERATED_NGINX_DIR"
 
-        # Extract services and generate nginx templates
+    # Extract services and generate nginx templates
     yq '.services | keys[]' "$SERVICES_CONFIG" | while read -r service_key; do
         service_key=$(echo "$service_key" | tr -d '"')
         echo "  Processing nginx config for: $service_key"
 
-        # Get domain and nginx configuration with proper escaping
+        # Check if service uses external template file
+        template_file=$(yq -r ".services[\"${service_key}\"].nginx.template_file" "$SERVICES_CONFIG")
+        if [ "$template_file" != "null" ] && [ -n "$template_file" ]; then
+            echo "    → Using external template: $template_file"
+            # Skip generation - external template will be used directly
+            continue
+        fi
+
+        # Get configuration values
         domain=$(yq ".services[\"${service_key}\"].domain" "$SERVICES_CONFIG" | tr -d '"')
+        upstream=$(yq -r ".services[\"${service_key}\"].nginx.upstream" "$SERVICES_CONFIG")
         additional_config=$(yq -r ".services[\"${service_key}\"].nginx.additional_config" "$SERVICES_CONFIG")
 
         # Generate normalized domain variable name
         domain_var=$(normalize_service_name_for_env "$service_key")
 
-        # Generate nginx template
+        # Start generating the template
         cat > "$GENERATED_NGINX_DIR/${service_key}.template" <<EOF
+# Generated nginx template for $service_key
+# HTTP to HTTPS redirect
+server {
+    listen 80;
+    listen [::]:80;
+    server_name \${DOMAIN_${domain_var}};
+
+    return 301 https://\$host\$request_uri;
+}
+
+# HTTPS server
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
@@ -96,7 +117,26 @@ server {
 
     include /etc/nginx/conf.d/includes/ssl;
 
-$(echo "$additional_config" | sed 's/^/    /' | sed 's/null//')
+EOF
+
+        # Add custom configuration or default proxy setup
+        if [ "$additional_config" != "null" ] && [ -n "$additional_config" ]; then
+            # Use custom additional_config (with env var support)
+            printf '%s\n' "$additional_config" | sed 's/^/    /' >> "$GENERATED_NGINX_DIR/${service_key}.template"
+        else
+            # Use default proxy configuration
+            if [ "$upstream" != "null" ] && [ -n "$upstream" ]; then
+                cat >> "$GENERATED_NGINX_DIR/${service_key}.template" <<EOF
+    location / {
+        include /etc/nginx/conf.d/includes/proxy;
+        proxy_pass http://$upstream;
+    }
+EOF
+            fi
+        fi
+
+        # Add closing and logging
+        cat >> "$GENERATED_NGINX_DIR/${service_key}.template" <<EOF
 
     access_log off;
     error_log  /var/log/nginx/error.log error;
