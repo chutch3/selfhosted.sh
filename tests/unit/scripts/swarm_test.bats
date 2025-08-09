@@ -53,14 +53,14 @@ teardown() {
     temp_del "$TEST_TEMP_DIR"
 }
 
-@test "swarm_create_ssl_secrets_should_create_docker_secrets_from_cert_files" {
+@test "swarm_setup_certificates_should_create_docker_secrets_from_cert_files" {
     # Clear previous commands
     true > "$DOCKER_COMMANDS_FILE"
 
     # Change to test directory for relative file operations
     cd "$TEST_TEMP_DIR"
 
-    run swarm_create_ssl_secrets
+    run swarm_setup_certificates
 
     echo "Status: $status" >&2
     echo "Output: $output" >&2
@@ -245,10 +245,10 @@ EOF
 @test "swarm_sync_should_add_missing_nodes" {
     # Clear previous commands
     true > "$DOCKER_COMMANDS_FILE"
-    
+
     # Change to test directory for relative file operations
     cd "$TEST_TEMP_DIR"
-    
+
     # Create test machines.yml file with manager and 2 workers
     cat > "machines.yml" <<EOF
 machines:
@@ -278,7 +278,7 @@ EOF
                 ;;
         esac
     }
-    
+
     # Mock grep command to properly filter out manager from node list and check node existence
     grep() {
         local args=("$@")
@@ -357,7 +357,7 @@ EOF
     export -f file_read ssh_docker_command swarm_add_worker_node
     export -f docker_node_inspect docker_node_update_label swarm_display_status
 
-    run swarm_sync_node_configuration
+    run swarm_sync_nodes
 
     echo "Status: $status" >&2
     echo "Output: $output" >&2
@@ -381,10 +381,10 @@ EOF
 @test "swarm_sync_should_remove_extra_nodes" {
     # Clear previous commands
     true > "$DOCKER_COMMANDS_FILE"
-    
+
     # Change to test directory for relative file operations
     cd "$TEST_TEMP_DIR"
-    
+
     # Create test machines.yml file with manager and only 1 worker
     cat > "machines.yml" <<EOF
 machines:
@@ -412,7 +412,7 @@ EOF
                 ;;
         esac
     }
-    
+
     # Mock grep command to properly filter out manager and check node existence
     grep() {
         local args=("$@")
@@ -484,7 +484,7 @@ EOF
     export -f docker_node_update_availability docker_node_remove ssh_docker_command sleep
     export -f swarm_add_worker_node docker_node_inspect docker_node_update_label swarm_display_status
 
-    run swarm_sync_node_configuration
+    run swarm_sync_nodes
 
     echo "Status: $status" >&2
     echo "Output: $output" >&2
@@ -517,10 +517,10 @@ EOF
 @test "swarm_sync_should_update_node_labels" {
     # Clear previous commands
     true > "$DOCKER_COMMANDS_FILE"
-    
+
     # Change to test directory for relative file operations
     cd "$TEST_TEMP_DIR"
-    
+
     # Create test machines.yml file with workers that have labels
     cat > "machines.yml" <<EOF
 machines:
@@ -552,7 +552,7 @@ EOF
                 ;;
         esac
     }
-    
+
     # Mock grep command
     grep() {
         local args=("$@")
@@ -611,7 +611,7 @@ EOF
     export -f docker_node_update_availability docker_node_remove ssh_docker_command
     export -f swarm_add_worker_node swarm_display_status
 
-    run swarm_sync_node_configuration
+    run swarm_sync_nodes
 
     echo "Status: $status" >&2
     echo "Output: $output" >&2
@@ -633,7 +633,7 @@ EOF
     [[ "$commands_called" == *"docker_node_update_label --label-add storage=ssd worker1.test.com"* ]]
     [[ "$commands_called" == *"docker_node_update_label --label-add env=production worker1.test.com"* ]]
 
-    # Verify that old labels were removed and new labels were added for worker2  
+    # Verify that old labels were removed and new labels were added for worker2
     [[ "$commands_called" == *"docker_node_update_label --label-rm old_label3 worker2.test.com"* ]]
     [[ "$commands_called" == *"docker_node_update_label --label-add storage=hdd worker2.test.com"* ]]
     [[ "$commands_called" == *"docker_node_update_label --label-add env=staging worker2.test.com"* ]]
@@ -642,7 +642,7 @@ EOF
 @test "swarm_display_status_should_show_nodes_and_services" {
     # Clear previous commands
     true > "$DOCKER_COMMANDS_FILE"
-    
+
     # Change to test directory for relative file operations
     cd "$TEST_TEMP_DIR"
 

@@ -7,7 +7,7 @@ source scripts/wrappers/file_wrapper.sh
 source scripts/ssh.sh
 
 
-swarm_create_ssl_secrets() {
+swarm_setup_certificates() {
     load_env
 
     echo "Creating swarm secrets for $BASE_DOMAIN"
@@ -37,7 +37,7 @@ swarm_initialize_manager() {
 
 
 # Initial setup of swarm cluster
-swarm_initialize_cluster() {
+swarm_setup_cluster() {
     # First ensure we have a token
     # if [ ! -f .swarm_token ]; then
     #     echo "No swarm token found. Running swarm init first..."
@@ -49,10 +49,10 @@ swarm_initialize_cluster() {
     ensure_certs_exist
 
     # Create Docker secrets
-    swarm_create_ssl_secrets
+    swarm_setup_certificates
 
     # Sync nodes to match configuration
-    swarm_sync_node_configuration
+    swarm_sync_nodes
 }
 
 # Join a node to the swarm
@@ -77,7 +77,7 @@ swarm_add_worker_node() {
 }
 
 # Ongoing maintenance of swarm nodes
-swarm_sync_node_configuration() {
+swarm_sync_nodes() {
     echo "Syncing swarm nodes with machines.yml configuration..."
 
     # Get current worker nodes from swarm
