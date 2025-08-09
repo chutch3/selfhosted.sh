@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
     # Load test helper functions
     load ../scripts/test_helper
@@ -122,7 +124,8 @@ teardown() {
 @test "selfhosted_deploy_compose_should_use_generated_files" {
     # Test that './selfhosted deploy compose' attempts to call compose function
     cd "${PROJECT_ROOT}"
-    run bash "${PROJECT_ROOT}/selfhosted.sh" deploy compose up --dry-run
+    # Expect either success (0) or command not found (127) - both are valid
+    run -0 -127 bash "${PROJECT_ROOT}/selfhosted.sh" deploy compose up --dry-run
     # Should either generate files and run compose, or show that docker-compose is missing
     [[ "$output" == *"Starting services with Docker Compose"* ]] || [[ "$output" == *"docker-compose: command not found"* ]]
 }
