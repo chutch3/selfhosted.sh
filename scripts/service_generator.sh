@@ -392,9 +392,8 @@ generate_swarm_stack_from_services() {
 
     echo "🐳 Generating Docker Swarm stack from services configuration..."
 
-    # Set output path
-    local SWARM_STACK="${PROJECT_ROOT}/deployments/swarm/stack.yaml"
-    mkdir -p "$(dirname "$SWARM_STACK")"
+    # Set output path (temporary location for legacy compatibility)
+    local SWARM_STACK="${PROJECT_ROOT}/generated-swarm-stack.yaml"
 
     # Start the swarm stack file with infrastructure services
     cat > "$SWARM_STACK" <<EOF
@@ -927,7 +926,14 @@ EOF
 
     # Docker Swarm Stack
     if generate_swarm_stack_from_services; then
-        cp "$PROJECT_ROOT/deployments/swarm/stack.yaml" "$generated_dir/deployments/swarm-stack.yaml"
+        # Copy the temporary file and replace the header
+        cp "$PROJECT_ROOT/generated-swarm-stack.yaml" "$generated_dir/deployments/swarm-stack.yaml"
+
+        # Replace the header with consistent format
+        sed -i '1,3c\
+# Generated from config/services.yaml\
+# DO NOT EDIT - This file is auto-generated\
+# Generated '"$(date)" "$generated_dir/deployments/swarm-stack.yaml"
     fi
 
     # Generate nginx templates
@@ -1023,6 +1029,12 @@ cleanup_legacy_generated_files() {
         rm -rf "$PROJECT_ROOT/generated-nginx"
         files_removed=$((files_removed + 1))
         echo "   Removed: generated-nginx/"
+    fi
+
+    if [ -f "$PROJECT_ROOT/generated-swarm-stack.yaml" ]; then
+        rm "$PROJECT_ROOT/generated-swarm-stack.yaml"
+        files_removed=$((files_removed + 1))
+        echo "   Removed: generated-swarm-stack.yaml"
     fi
 
     if [ -f "$PROJECT_ROOT/.domains" ]; then

@@ -172,8 +172,8 @@ certs/
 generated/
 generated-docker-compose.yaml
 generated-nginx/
+generated-swarm-stack.yaml
 .enabled-services.backup
-deployments/swarm/stack.yaml
 
 # Environment-specific configuration files
 plan.md
