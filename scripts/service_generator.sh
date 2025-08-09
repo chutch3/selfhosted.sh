@@ -10,6 +10,13 @@ GENERATED_COMPOSE="${GENERATED_COMPOSE:-$PROJECT_ROOT/generated-docker-compose.y
 GENERATED_NGINX_DIR="${GENERATED_NGINX_DIR:-$PROJECT_ROOT/generated-nginx}"
 DOMAINS_FILE="${DOMAINS_FILE:-$PROJECT_ROOT/.domains}"
 
+# Helper function to call our YAML parser
+yaml_parser() {
+    local script_dir
+    script_dir="$(dirname "${BASH_SOURCE[0]}")"
+    "$script_dir/yaml_parser.sh" "$@"
+}
+
 # Function: generate_compose_from_services
 # Description: Generates a docker-compose.yaml file from services.yaml
 # Arguments: None
@@ -517,13 +524,13 @@ enable_services_via_yaml() {
         echo "✅ Enabling service: $service"
 
         # Check if service exists in config
-        if ! yq ".services | has(\"$service\")" "$SERVICES_CONFIG" | grep -q "true"; then
+        if ! yaml_parser get-services "$SERVICES_CONFIG" | grep -q "^$service$"; then
             echo "❌ Error: Service '$service' not found in configuration"
             return 1
         fi
 
         # Set enabled: true for the service
-        yq --yaml-output --in-place ".services[\"$service\"].enabled = true" "$SERVICES_CONFIG"
+        yaml_parser set-enabled "$SERVICES_CONFIG" "$service" "true"
     done
 
     echo "🎉 Successfully enabled ${#services[@]} service(s)"
@@ -546,13 +553,13 @@ disable_services_via_yaml() {
         echo "❌ Disabling service: $service"
 
         # Check if service exists in config
-        if ! yq ".services | has(\"$service\")" "$SERVICES_CONFIG" | grep -q "true"; then
+        if ! yaml_parser get-services "$SERVICES_CONFIG" | grep -q "^$service$"; then
             echo "❌ Error: Service '$service' not found in configuration"
             return 1
         fi
 
         # Set enabled: false for the service
-        yq --yaml-output --in-place ".services[\"$service\"].enabled = false" "$SERVICES_CONFIG"
+        yaml_parser set-enabled "$SERVICES_CONFIG" "$service" "false"
     done
 
     echo "🎉 Successfully disabled ${#services[@]} service(s)"
@@ -573,7 +580,7 @@ list_enabled_services_from_yaml() {
 
     # Get all services where enabled = true
     local enabled_services
-    enabled_services=$(yq '.services | to_entries | map(select(.value.enabled == true)) | .[].key' "$SERVICES_CONFIG" | tr -d '"')
+    enabled_services=$(yaml_parser get-enabled "$SERVICES_CONFIG")
 
     if [ -z "$enabled_services" ]; then
         echo "   No services currently enabled"
@@ -602,7 +609,7 @@ generate_enabled_services_from_yaml() {
     echo "📝 Generating .enabled-services file from services.yaml..."
 
     # Get all services where enabled = true and write to file
-    yq '.services | to_entries | map(select(.value.enabled == true)) | .[].key' "$SERVICES_CONFIG" | tr -d '"' > "$enabled_services_file"
+    yaml_parser get-enabled "$SERVICES_CONFIG" > "$enabled_services_file"
 
     local count
     count=$(wc -l < "$enabled_services_file")
@@ -661,15 +668,21 @@ migrate_from_legacy_enabled_services() {
     echo "🔄 Migrating from legacy .enabled-services to services.yaml..."
 
     # First, set all services to disabled
-    yq --yaml-output --in-place '.services |= with_entries(.value.enabled = false)' "$SERVICES_CONFIG"
+    local services
+    services=$(yaml_parser get-services "$SERVICES_CONFIG")
+
+    while IFS= read -r service; do
+        [ -z "$service" ] && continue
+        yaml_parser set-enabled "$SERVICES_CONFIG" "$service" "false"
+    done <<< "$services"
 
     # Read legacy file and enable those services
     while IFS= read -r service; do
         [ -z "$service" ] && continue
         echo "  Migrating: $service"
 
-        if yq ".services | has(\"$service\")" "$SERVICES_CONFIG" | grep -q "true"; then
-            yq --yaml-output --in-place ".services[\"$service\"].enabled = true" "$SERVICES_CONFIG"
+        if yaml_parser get-services "$SERVICES_CONFIG" | grep -q "^$service$"; then
+            yaml_parser set-enabled "$SERVICES_CONFIG" "$service" "true"
         else
             echo "  ⚠️  Warning: Service '$service' not found in services.yaml, skipping"
         fi
