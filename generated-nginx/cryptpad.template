@@ -1,0 +1,35 @@
+# Generated nginx template for cryptpad
+# HTTP to HTTPS redirect
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN_CRYPTPAD};
+
+    return 301 https://$host$request_uri;
+}
+
+# HTTPS server
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name ${DOMAIN_CRYPTPAD};
+
+    include /etc/nginx/conf.d/includes/ssl;
+
+    set $main_domain ${DOMAIN_CRYPTPAD};
+    set $sandbox_domain ${DOMAIN_CRYPTPAD_SANDBOX};
+    set $api_domain "api.${DOMAIN_CRYPTPAD}";
+    set $files_domain "files.${DOMAIN_CRYPTPAD}";
+
+    add_header Cross-Origin-Resource-Policy cross-origin;
+    add_header Cross-Origin-Embedder-Policy require-corp;
+
+    set $allowed_origins "https://${DOMAIN_CRYPTPAD_SANDBOX}";
+
+    location / {
+        proxy_pass http://cryptpad:3000;
+    }
+
+    access_log off;
+    error_log  /var/log/nginx/error.log error;
+}
