@@ -22,15 +22,20 @@ teardown() {
 @test "selfhosted_script_should_show_usage_for_unknown_command" {
     run bash "${BATS_TEST_DIRNAME}/../../../selfhosted.sh" unknown
     [ "$status" -eq 1 ]
-    [[ "$output" == *"Usage:"* ]]
-    [[ "$output" == *"{compose|swarm|k8s|machines}"* ]]
+    [[ "$output" == *"Unknown command: unknown"* ]]
+    [[ "$output" == *"Available commands:"* ]]
+    [[ "$output" == *"service"* ]]
+    [[ "$output" == *"deploy"* ]]
+    [[ "$output" == *"config"* ]]
 }
 
 @test "selfhosted_script_should_show_usage_for_no_arguments" {
     run bash "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"Usage:"* ]]
-    [[ "$output" == *"init-certs|list|sync-files"* ]]
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"USAGE:"* ]]
+    [[ "$output" == *"service"* ]]
+    [[ "$output" == *"deploy"* ]]
+    [[ "$output" == *"config"* ]]
 }
 
 @test "selfhosted_script_should_have_correct_shebang" {
@@ -46,14 +51,16 @@ teardown() {
 }
 
 @test "selfhosted_script_should_contain_case_statement" {
-    # Test that the script contains the main case statement
-    run grep -A 10 "case.*\$1.*in" "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
+    # Test that the script contains the main case statement with service command
+    run grep -A 20 "case.*\$1.*in" "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"init-certs"* ]]
-    [[ "$output" == *"list"* ]]
+    [[ "$output" == *"service"* ]]
 
-    # Check for deployment targets in a separate grep
-    run grep "compose|swarm|k8s|machines" "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
+    # Check for modern commands exist in the script
+    run grep "deploy)" "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
+    [ "$status" -eq 0 ]
+
+    run grep "config)" "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
     [ "$status" -eq 0 ]
 }
 
@@ -66,9 +73,12 @@ teardown() {
 }
 
 @test "selfhosted_script_should_handle_deployment_targets" {
-    # Test that the script contains logic for deployment targets
-    run grep -A 10 "compose|swarm|k8s|machines" "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
+    # Test that the script contains logic for deployment commands
+    run grep -A 5 "enhanced_deploy" "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"command_exists"* ]]
-    [[ "$output" == *"shift 2"* ]]
+    [[ "$output" == *"deploy"* ]]
+
+    # Check for service generator integration
+    run grep "service_generator" "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
+    [ "$status" -eq 0 ]
 }
