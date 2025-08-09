@@ -175,6 +175,9 @@ generated-nginx/
 generated-swarm-stack.yaml
 .enabled-services.backup
 
+# Temporary system files
+.*csm_setup*
+
 # Environment-specific configuration files
 plan.md
 machines.yml
