@@ -173,6 +173,7 @@ generated/
 generated-docker-compose.yaml
 generated-nginx/
 .enabled-services.backup
+deployments/swarm/stack.yaml
 
 # Environment-specific configuration files
 plan.md
