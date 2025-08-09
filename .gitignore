@@ -168,6 +168,12 @@ cython_debug/
 .enabled-services
 certs/
 
+# Generated files - auto-generated from config/services.yaml
+generated/
+generated-docker-compose.yaml
+generated-nginx/
+.enabled-services.backup
+
 # Environment-specific configuration files
 plan.md
 machines.yml
