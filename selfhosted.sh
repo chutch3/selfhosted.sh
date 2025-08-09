@@ -414,6 +414,19 @@ service_generate() {
     echo "   - .domains (Domain variables)"
 }
 
+# Function: service_generate_consolidated
+# Description: Generates all files to consolidated generated/ directory structure
+service_generate_consolidated() {
+    echo "🏗️ Generating files to consolidated directory structure..."
+    if ! generate_all_to_generated_dir; then
+        echo "❌ Failed to generate consolidated directory structure"
+        exit 1
+    fi
+    echo "🎉 Consolidated structure generated successfully!"
+    echo "📁 View the structure: ls -la generated/"
+    echo "📖 Read the guide: cat generated/README.md"
+}
+
 # Function: service_validate
 # Description: Validates the services configuration
 service_validate() {
@@ -525,19 +538,21 @@ SUBCOMMANDS:
     status                   Show enabled/disabled status of all services
     interactive              Interactive service selection interface
     generate                 Generate deployment files from services.yaml
+    generate-consolidated    Generate files to consolidated generated/ directory
     validate                 Validate services configuration syntax
     info <name>              Show detailed information about a service
     help                     Show this help message
 
 EXAMPLES:
-    $0 service list              # Show all available services
-    $0 service enable actual     # Enable the 'actual' service
-    $0 service disable homepage  # Disable the 'homepage' service
-    $0 service status            # Show which services are enabled/disabled
-    $0 service interactive       # Interactive service selection
-    $0 service info actual       # Show details about 'actual' service
-    $0 service generate          # Generate docker-compose.yaml and nginx templates
-    $0 service validate          # Check services.yaml syntax and structure
+    $0 service list                    # Show all available services
+    $0 service enable actual           # Enable the 'actual' service
+    $0 service disable homepage        # Disable the 'homepage' service
+    $0 service status                  # Show which services are enabled/disabled
+    $0 service interactive             # Interactive service selection
+    $0 service info actual             # Show details about 'actual' service
+    $0 service generate                # Generate docker-compose.yaml and nginx templates
+    $0 service generate-consolidated   # Generate to clean generated/ directory structure
+    $0 service validate                # Check services.yaml syntax and structure
 EOF
 }
 
@@ -647,6 +662,7 @@ case "$1" in
             status) service_status ;;
             interactive) service_interactive ;;
             generate) service_generate ;;
+            generate-consolidated) service_generate_consolidated ;;
             validate) service_validate ;;
             info) service_info "$3" ;;
             help|"") service_help ;;
