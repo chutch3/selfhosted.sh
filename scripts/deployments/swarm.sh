@@ -2,7 +2,6 @@
 
 # Source wrapper interfaces for external dependencies
 source scripts/wrappers/docker_wrapper.sh
-source scripts/wrappers/ssh_wrapper.sh
 source scripts/wrappers/file_wrapper.sh
 source scripts/ssh.sh
 

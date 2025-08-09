@@ -28,9 +28,9 @@ setup() {
     }
 
     # Source the swarm script with mocked wrapper functions
-    source "${BATS_TEST_DIRNAME}/../../../scripts/wrappers/docker_wrapper.sh"
-    source "${BATS_TEST_DIRNAME}/../../../scripts/wrappers/ssh_wrapper.sh"
+        source "${BATS_TEST_DIRNAME}/../../../scripts/wrappers/docker_wrapper.sh"
     source "${BATS_TEST_DIRNAME}/../../../scripts/wrappers/file_wrapper.sh"
+    source "${BATS_TEST_DIRNAME}/../../../scripts/ssh.sh"
     source "${BATS_TEST_DIRNAME}/../../../scripts/deployments/swarm.sh"
 
     # Track docker commands called
