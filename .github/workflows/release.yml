@@ -46,11 +46,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bats
 
-      - name: Install dependencies
-        run: task install
-
-      - name: Run all checks
-        run: task check
+      - name: Install dependencies and run checks
+        run: task release:prepare
 
   release:
     name: Semantic Release
@@ -83,28 +80,28 @@ jobs:
           poetry config virtualenvs.create true --local
           poetry config virtualenvs.in-project true --local
 
-      - name: Install dependencies
-        run: poetry install
+      - name: Install Task
+        uses: arduino/setup-task@v1
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Git
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Install dependencies
+        run: task install
 
       - name: Run Semantic Release
         id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          poetry run semantic-release version --print > .version.txt 2>/dev/null || echo "0.0.0" > .version.txt
-          if [ "$(cat .version.txt)" != "0.0.0" ]; then
+          task release:full
+          # Set GitHub Actions outputs for downstream jobs
+          if [ -f .version.txt ] && [ "$(cat .version.txt)" != "0.0.0" ]; then
             echo "released=true" >> $GITHUB_OUTPUT
             echo "version=$(cat .version.txt)" >> $GITHUB_OUTPUT
             echo "tag=v$(cat .version.txt)" >> $GITHUB_OUTPUT
-            poetry run semantic-release publish
           else
             echo "released=false" >> $GITHUB_OUTPUT
-            echo "No release necessary"
           fi
 
   update-lock:
@@ -125,17 +122,26 @@ jobs:
           python-version: "3.9"
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
+        uses: abatilo/actions-poetry@v3
         with:
-          version: latest
+          poetry-version: latest
+
+      - name: Configure Poetry
+        run: |
+          poetry config virtualenvs.create true --local
+          poetry config virtualenvs.in-project true --local
+
+      - name: Install Task
+        uses: arduino/setup-task@v1
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Poetry lock file
         run: |
-          poetry lock --no-update
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git diff --name-only)" ]; then
-            git add poetry.lock
-            git commit -m "chore: update poetry.lock after release"
+          task release:setup-git
+          task release:update-lock
+          # Push changes if any were made
+          if [ -n "$(git log --oneline HEAD~1..HEAD | grep 'chore: update poetry.lock')" ]; then
             git push
           fi
