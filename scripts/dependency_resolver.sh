@@ -197,8 +197,7 @@ generate_startup_order() {
     echo "🚀 Generating startup order..." >&2
 
     local resolved_order
-    resolved_order=$(resolve_service_dependencies)
-    if [ $? -ne 0 ]; then
+    if ! resolved_order=$(resolve_service_dependencies); then
         return 1
     fi
 
@@ -312,16 +311,17 @@ EOF
         echo "| $service | $deps | $dependents | $priority |" >> "$DEPENDENCY_GRAPH_FILE"
     done
 
-    echo "" >> "$DEPENDENCY_GRAPH_FILE"
-    echo "## Startup Order" >> "$DEPENDENCY_GRAPH_FILE"
-    echo "" >> "$DEPENDENCY_GRAPH_FILE"
-
     local startup_order
     startup_order=$(generate_startup_order 2>/dev/null)
 
-    echo '```' >> "$DEPENDENCY_GRAPH_FILE"
-    echo "$startup_order" >> "$DEPENDENCY_GRAPH_FILE"
-    echo '```' >> "$DEPENDENCY_GRAPH_FILE"
+    {
+        echo ""
+        echo "## Startup Order"
+        echo ""
+        echo '```'
+        echo "$startup_order"
+        echo '```'
+    } >> "$DEPENDENCY_GRAPH_FILE"
 
     echo "✅ Dependency graph saved to $DEPENDENCY_GRAPH_FILE"
 }
@@ -417,7 +417,7 @@ wait_for_service_dependencies() {
             current_time=$(date +%s)
             local elapsed=$((current_time - start_time))
 
-            if [ $elapsed -ge $max_wait ]; then
+            if [ "$elapsed" -ge "$max_wait" ]; then
                 echo "❌ Timeout waiting for dependency $dep of $service"
                 return 1
             fi
