@@ -26,7 +26,9 @@ get_all_services() {
         return 1
     fi
 
-    yq '.services | keys[]' "$SERVICES_CONFIG" | tr -d '"'
+    # Use -r flag for raw output and filter out any lines starting with # (comments)
+    yq -r '.services | keys[]' "$SERVICES_CONFIG" 2>/dev/null | grep -v '^#' | tr -d '"' || \
+    yq '.services | keys[]' "$SERVICES_CONFIG" | grep -v '^#' | tr -d '"'
 }
 
 # Function: get_service_dependencies
