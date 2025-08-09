@@ -60,6 +60,12 @@ services:
     category: finance
     domain: "budget"
     port: 5006
+    volumes:
+      - name: "data"
+        description: "Application data and database"
+        type: "application_data"
+        size: "1GB"
+        backup_priority: "high"
     compose:
       image: "docker.io/actualbudget/actual-server:latest"
       ports:
@@ -96,6 +102,22 @@ services:
     port: 2342
     depends_on:
       - mariadb
+    volumes:
+      - name: "config"
+        description: "Configuration files"
+        type: "config"
+        size: "100MB"
+        backup_priority: "medium"
+      - name: "photos"
+        description: "Photo storage"
+        type: "media"
+        size: "500GB"
+        backup_priority: "high"
+      - name: "cache"
+        description: "Thumbnail cache"
+        type: "cache"
+        size: "50GB"
+        backup_priority: "low"
     compose:
       image: "photoprism/photoprism:latest"
       stop_grace_period: 10s
