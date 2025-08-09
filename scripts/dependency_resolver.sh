@@ -103,9 +103,9 @@ _has_circular_dependency() {
     local target="$2"
     local visited="$3"
 
-    # If we've visited this service in current path, we have a cycle
+    # If we've visited this service in current path, avoid infinite recursion
     if echo "$visited" | grep -q "\<$current\>"; then
-        return 0  # Already checked this path
+        return 0  # Already checked this path, no cycle from here
     fi
 
     # Get dependencies of current service
