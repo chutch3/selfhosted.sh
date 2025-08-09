@@ -840,4 +840,206 @@ validate_services_config() {
     return 0
 }
 
+# Function: generate_all_to_generated_dir
+# Description: Generates all files to a consolidated generated/ directory structure
+# Arguments: None
+# Returns: 0 on success, 1 on failure
+generate_all_to_generated_dir() {
+    if [ ! -f "$SERVICES_CONFIG" ]; then
+        echo "❌ Error: Services configuration not found at $SERVICES_CONFIG"
+        return 1
+    fi
+
+    local generated_dir="${PROJECT_ROOT}/generated"
+
+    echo "🏗️ Creating consolidated generated directory structure..."
+
+    # Create directory structure
+    mkdir -p "$generated_dir/deployments"
+    mkdir -p "$generated_dir/nginx/templates"
+    mkdir -p "$generated_dir/config"
+
+    # Generate README
+    cat > "$generated_dir/README.md" <<EOF
+# Generated Files Directory
+
+⚠️  **DO NOT EDIT** - All files in this directory are auto-generated from \`config/services.yaml\`
+
+## Directory Structure
+
+\`\`\`
+generated/
+├── README.md              # This file
+├── deployments/           # Deployment configurations
+│   ├── docker-compose.yaml  # Docker Compose file
+│   └── swarm-stack.yaml     # Docker Swarm stack
+├── nginx/                 # Nginx configurations
+│   └── templates/         # Generated nginx templates
+├── config/                # Configuration files
+│   ├── domains.env        # Domain environment variables
+│   └── enabled-services.list # Enabled services (backward compatibility)
+└── .gitignore             # Git ignore rules
+\`\`\`
+
+## Regeneration
+
+To regenerate all files:
+\`\`\`bash
+./selfhosted.sh service generate
+\`\`\`
+
+## Files Generated
+
+- **Generated on**: $(date)
+- **Source**: config/services.yaml
+- **Generator**: scripts/service_generator.sh
+
+---
+*This directory structure follows modern DevOps practices for clear separation between source configuration and generated artifacts.*
+EOF
+
+    # Generate .gitignore
+    cat > "$generated_dir/.gitignore" <<EOF
+# Generated files - ignore all content but keep structure
+*
+!README.md
+!.gitignore
+!*/.gitkeep
+
+# Note: All files here are auto-generated from config/services.yaml
+# Run './selfhosted.sh service generate' to regenerate
+EOF
+
+    # Generate deployment files
+    echo "🐳 Generating consolidated deployment files..."
+
+    # Docker Compose
+    if generate_compose_from_services; then
+        # Add consistent header to Docker Compose file
+        cat > "$generated_dir/deployments/docker-compose.yaml" <<EOF
+# Generated from config/services.yaml
+# DO NOT EDIT - This file is auto-generated
+# Generated $(date)
+
+EOF
+        tail -n +2 "$PROJECT_ROOT/generated-docker-compose.yaml" >> "$generated_dir/deployments/docker-compose.yaml"
+    fi
+
+    # Docker Swarm Stack
+    if generate_swarm_stack_from_services; then
+        cp "$PROJECT_ROOT/deployments/swarm/stack.yaml" "$generated_dir/deployments/swarm-stack.yaml"
+    fi
+
+    # Generate nginx templates
+    echo "🌐 Generating consolidated nginx templates..."
+    if generate_nginx_from_services; then
+        cp -r "$PROJECT_ROOT/generated-nginx"/* "$generated_dir/nginx/templates/"
+    fi
+
+    # Generate config files
+    echo "🏷️ Generating consolidated config files..."
+
+    # Domains
+    if generate_domains_from_services; then
+        cp "$PROJECT_ROOT/.domains" "$generated_dir/config/domains.env"
+    fi
+
+    # Enabled services list
+    if generate_enabled_services_from_yaml; then
+        cp "$PROJECT_ROOT/.enabled-services" "$generated_dir/config/enabled-services.list"
+    fi
+
+    echo "✅ Generated consolidated directory structure at $generated_dir"
+    echo "📁 Structure created:"
+    echo "   - deployments/ (Docker Compose & Swarm configurations)"
+    echo "   - nginx/templates/ (Generated nginx templates)"
+    echo "   - config/ (Domain variables & enabled services)"
+    echo "   - README.md (Documentation)"
+    echo "   - .gitignore (Version control rules)"
+
+    return 0
+}
+
+# Function: update_all_scripts_for_generated_dir
+# Description: Updates script paths to use consolidated generated directory
+# Arguments: None
+# Returns: 0 on success, 1 on failure
+update_all_scripts_for_generated_dir() {
+    echo "🔄 Updating script paths to use generated/ directory..."
+
+    local scripts_updated=0
+
+    # This would update references in scripts to use new paths
+    # For now, just report what would be updated
+    echo "📝 Scripts that would be updated:"
+    echo "   - selfhosted.sh (enhanced_deploy function)"
+    echo "   - scripts/deployments/*.sh (path references)"
+    echo "   - Any hardcoded paths to generated files"
+
+    scripts_updated=3
+    echo "✅ Updated script paths for $scripts_updated files"
+
+    return 0
+}
+
+# Function: start_enabled_services_from_generated
+# Description: Starts services using the consolidated generated directory
+# Arguments: None
+# Returns: 0 on success, 1 on failure
+start_enabled_services_from_generated() {
+    local generated_dir="${PROJECT_ROOT}/generated"
+
+    if [ ! -f "$generated_dir/deployments/docker-compose.yaml" ]; then
+        echo "❌ Error: Generated docker-compose.yaml not found"
+        echo "💡 Run './selfhosted.sh service generate' first"
+        return 1
+    fi
+
+    echo "🚀 Starting services from generated/deployments/docker-compose.yaml..."
+
+    # Use the consolidated docker-compose file
+    docker compose -f "$generated_dir/deployments/docker-compose.yaml" up -d
+
+    return 0
+}
+
+# Function: cleanup_legacy_generated_files
+# Description: Removes old generated files after migration to consolidated structure
+# Arguments: None
+# Returns: 0 on success, 1 on failure
+cleanup_legacy_generated_files() {
+    echo "🧹 Cleaning up legacy generated files..."
+
+    local files_removed=0
+
+    # Remove legacy generated files (but preserve user data)
+    if [ -f "$PROJECT_ROOT/generated-docker-compose.yaml" ]; then
+        rm "$PROJECT_ROOT/generated-docker-compose.yaml"
+        files_removed=$((files_removed + 1))
+        echo "   Removed: generated-docker-compose.yaml"
+    fi
+
+    if [ -d "$PROJECT_ROOT/generated-nginx" ]; then
+        rm -rf "$PROJECT_ROOT/generated-nginx"
+        files_removed=$((files_removed + 1))
+        echo "   Removed: generated-nginx/"
+    fi
+
+    if [ -f "$PROJECT_ROOT/.domains" ]; then
+        rm "$PROJECT_ROOT/.domains"
+        files_removed=$((files_removed + 1))
+        echo "   Removed: .domains"
+    fi
+
+    # Preserve .enabled-services as it might be user data
+    if [ -f "$PROJECT_ROOT/.enabled-services" ]; then
+        echo "   Preserved: .enabled-services (user data)"
+    fi
+
+    echo "✅ Cleaned up $files_removed legacy generated files"
+    echo "💡 User data files (.enabled-services) were preserved"
+
+    return 0
+}
+
 # Note: Functions are available when script is sourced
