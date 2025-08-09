@@ -1278,11 +1278,32 @@ generated/
 │   ├── cert-init.sh       # Certificate initialization script
 │   ├── check-certs.sh     # Certificate status checker
 │   ├── renew-certs.sh     # Certificate renewal script
+│   ├── setup-for-deployment.sh # Deployment-specific setup
 │   └── cert-status.sh     # Certificate status without Docker
 ├── config/                # Configuration files
 │   ├── domains.env        # Domain environment variables
 │   └── enabled-services.list # Enabled services (backward compatibility)
 └── .gitignore             # Git ignore rules
+\`\`\`
+
+## Certificate Management
+
+The \`certificates/\` directory contains automated SSL certificate management:
+
+### Initial Setup
+\`\`\`bash
+cd generated/certificates
+./cert-init.sh                    # Initialize certificates for your domain
+./setup-for-deployment.sh compose # Setup for Docker Compose
+# OR
+./setup-for-deployment.sh swarm   # Setup for Docker Swarm
+\`\`\`
+
+### Certificate Monitoring
+\`\`\`bash
+./cert-status.sh      # Check certificate status (no Docker needed)
+./check-certs.sh      # Detailed certificate checking
+./renew-certs.sh      # Renew certificates
 \`\`\`
 
 ## Regeneration
