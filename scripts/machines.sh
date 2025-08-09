@@ -71,6 +71,56 @@ machines_my_ip() {
     echo "$ip"
 }
 
+# Check if SSH is already configured for a host (without timeout)
+# Args:
+#   $1: Hostname to check
+#   $2: SSH user for the host
+# Returns:
+#   0 if SSH key authentication works, 1 otherwise
+machines_is_ssh_configured_no_timeout() {
+    local host=$1
+    local ssh_user=$2
+
+    # Try to connect with key auth - if it works, SSH is already configured
+    if ssh_key_auth "$ssh_user@$host" exit 2>/dev/null; then
+        return 0  # SSH is configured
+    else
+        return 1  # SSH needs setup
+    fi
+}
+
+# Check if SSH is already configured for a host
+# Args:
+#   $1: Hostname to check
+#   $2: SSH user for the host
+#   $3: Optional "debug" to show SSH command output
+# Returns:
+#   0 if SSH key authentication works, 1 otherwise
+machines_is_ssh_configured() {
+    local host=$1
+    local ssh_user=$2
+    local debug_mode=$3
+    local timeout_duration="${SSH_TIMEOUT:-5}"
+
+    # Use the SSH command directly with timeout built into ssh_key_auth function
+    # ssh_key_auth already has its own timeout, so we don't need external timeout
+    if [ "$debug_mode" = "debug" ]; then
+        # Show SSH output for debugging - don't suppress stderr
+        if ssh_key_auth "$ssh_user@$host" exit; then
+            return 0  # SSH is configured
+        else
+            return 1  # SSH needs setup
+        fi
+    else
+        # Normal operation - suppress output
+        if machines_is_ssh_configured_no_timeout "$host" "$ssh_user"; then
+            return 0  # SSH is configured
+        else
+            return 1  # SSH needs setup
+        fi
+    fi
+}
+
 # Get IP address for a given hostname
 # Args:
 #   $1: Hostname or IP address to resolve
@@ -148,6 +198,12 @@ machines_setup_ssh() {
             echo "No SSH user specified for $host, using current user: $ssh_user"
         fi
 
+        # Check if SSH is already configured for this host
+        if machines_is_ssh_configured "$host" "$ssh_user"; then
+            echo "Skipping SSH setup for already configured host: $host"
+            continue
+        fi
+
         echo "Setting up SSH access for $host (user: $ssh_user)..."
 
         # Create .ssh directory with correct permissions on remote host
@@ -171,7 +227,7 @@ machines_setup_ssh() {
         fi
 
         # Test the connection
-        if ! timeout 5 ssh_key_auth "$ssh_user@$host" exit; then
+        if ! ssh_key_auth "$ssh_user@$host" exit; then
             echo "Failed to verify SSH key access to $host" >&2
             return 1
         fi

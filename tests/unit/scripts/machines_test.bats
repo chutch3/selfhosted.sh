@@ -131,7 +131,12 @@ EOF
         "${@:2}"
     }
 
-    export -f ssh ssh-copy-id timeout
+    # Mock machines_is_ssh_configured to return "not configured" for all hosts
+    machines_is_ssh_configured() {
+        return 1
+    }
+
+    export -f ssh ssh-copy-id timeout machines_is_ssh_configured
 
     run machines_setup_ssh
     echo "output: $output" >&2
@@ -270,7 +275,12 @@ EOF
         "${@:2}"
     }
 
-    export -f chmod ssh_password_auth ssh_key_auth ssh_copy_id timeout
+    # Mock machines_is_ssh_configured to return "not configured" for all hosts
+    machines_is_ssh_configured() {
+        return 1
+    }
+
+    export -f chmod ssh_password_auth ssh_key_auth ssh_copy_id timeout machines_is_ssh_configured
 
     run machines_setup_ssh
     echo "Output: $output" >&2
@@ -317,7 +327,12 @@ EOF
         "${@:2}"
     }
 
-    export -f ssh ssh-copy-id timeout
+    # Mock machines_is_ssh_configured to return "not configured" for all hosts
+    machines_is_ssh_configured() {
+        return 1
+    }
+
+    export -f ssh ssh-copy-id timeout machines_is_ssh_configured
 
     run machines_setup_ssh
     echo "Output: $output" >&2
@@ -325,4 +340,124 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" =~ "Skipping SSH setup for local machine: manager.example.com" ]]
     [[ "$output" =~ "Setting up SSH access for worker1.example.com" ]]
+}
+
+@test "machines_is_ssh_configured returns true when SSH key auth works" {
+    ssh_key_auth() {
+        echo "SSH key auth successful" >&2
+        return 0
+    }
+
+    timeout() {
+        "${@:2}"
+    }
+
+    export -f ssh_key_auth timeout
+
+    run machines_is_ssh_configured "worker1.example.com" "admin2"
+    echo "Output: $output" >&2
+    [ "$status" -eq 0 ]
+}
+
+@test "machines_is_ssh_configured returns false when SSH key auth fails" {
+    ssh_key_auth() {
+        echo "SSH key auth failed" >&2
+        return 1
+    }
+
+    timeout() {
+        "${@:2}"
+    }
+
+    export -f ssh_key_auth timeout
+
+    run machines_is_ssh_configured "worker1.example.com" "admin2"
+    echo "Output: $output" >&2
+    [ "$status" -eq 1 ]
+}
+
+@test "machines_setup_ssh skips hosts that are already configured" {
+    # Mock machines_is_ssh_configured to return success for worker1, failure for worker2
+    machines_is_ssh_configured() {
+        case "$1" in
+            "worker1.example.com") return 0 ;;  # Already configured
+            "worker2.example.com") return 1 ;;  # Needs setup
+            "manager.example.com") return 1 ;;  # Needs setup
+            *) return 1 ;;
+        esac
+    }
+
+    # Mock other SSH-related commands
+    ssh_password_auth() {
+        echo "Password auth called with args: $*" >&2
+        return 0
+    }
+
+    ssh_key_auth() {
+        echo "Key auth called with args: $*" >&2
+        return 0
+    }
+
+    ssh_copy_id() {
+        echo "Copy ID called with args: $*" >&2
+        return 0
+    }
+
+    timeout() {
+        "${@:2}"
+    }
+
+    export -f machines_is_ssh_configured ssh_password_auth ssh_key_auth ssh_copy_id timeout
+
+    run machines_setup_ssh
+    echo "Output: $output" >&2
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "Skipping SSH setup for already configured host: worker1.example.com" ]]
+    [[ "$output" =~ "Setting up SSH access for worker2.example.com" ]]
+    [[ "$output" =~ "Setting up SSH access for manager.example.com" ]]
+}
+
+@test "machines_is_ssh_configured should allow debug mode" {
+    # Mock ssh_key_auth to fail but show what command was attempted
+    ssh_key_auth() {
+        echo "SSH Key Auth attempted with: $*" >&2
+        return 1
+    }
+
+    timeout() {
+        echo "Timeout called with: $*" >&2
+        "${@:2}"
+    }
+
+    export -f ssh_key_auth timeout
+
+    # Test that when we add a debug parameter, we can see the SSH attempts
+    run machines_is_ssh_configured "test.example.com" "testuser" "debug"
+    echo "Status: $status" >&2
+    echo "Output: $output" >&2
+    [ "$status" -eq 1 ]
+    [[ "$output" =~ "SSH Key Auth attempted with: testuser@test.example.com exit" ]]
+}
+
+@test "ssh functions should be available after sourcing ssh.sh" {
+    # Test that sourcing ssh.sh makes functions available
+    run bash -c "source scripts/ssh.sh 2>/dev/null && type ssh_key_auth"
+    echo "Output: $output" >&2
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "ssh_key_auth is a function" ]]
+}
+
+@test "machines_is_ssh_configured should work without timeout when SSH is configured" {
+    # Mock ssh_key_auth to succeed
+    ssh_key_auth() {
+        echo "SSH Key Auth successful" >&2
+        return 0
+    }
+
+    export -f ssh_key_auth
+
+    # Test without timeout to verify our logic works
+    run machines_is_ssh_configured_no_timeout "test.example.com" "testuser"
+    echo "Output: $output" >&2
+    [ "$status" -eq 0 ]
 }
