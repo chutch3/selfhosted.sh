@@ -380,6 +380,112 @@ EOF
     return 0
 }
 
+# Function: generate_swarm_stack_from_services
+# Description: Generates Docker Swarm stack.yaml from services.yaml
+# Arguments: None
+# Returns: 0 on success, 1 on failure
+generate_swarm_stack_from_services() {
+    if [ ! -f "$SERVICES_CONFIG" ]; then
+        echo "❌ Error: Services configuration not found at $SERVICES_CONFIG"
+        return 1
+    fi
+
+    echo "🐳 Generating Docker Swarm stack from services configuration..."
+
+    # Set output path
+    local SWARM_STACK="${PROJECT_ROOT}/deployments/swarm/stack.yaml"
+    mkdir -p "$(dirname "$SWARM_STACK")"
+
+    # Start the swarm stack file with infrastructure services
+    cat > "$SWARM_STACK" <<EOF
+# Generated Docker Swarm stack from config/services.yaml
+# DO NOT EDIT - This file is auto-generated
+# Generated $(date)
+
+services:
+  # Reverse Proxy (Infrastructure)
+  reverseproxy:
+    image: nginx:alpine
+    deploy:
+      mode: global  # Run on all nodes
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - \${PWD}/config/services/reverseproxy/templates/conf.d/enabled:/etc/nginx/templates/enabled:ro
+      - \${PWD}/config/services/reverseproxy/templates/includes:/etc/nginx/templates/includes:ro
+      - \${PWD}/config/services/reverseproxy/backend-not-found.html:/var/www/html/backend-not-found.html:ro
+      - \${PWD}/config/services/reverseproxy/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - \${PWD}/scripts/sleep.sh:/docker-entrypoint.d/99-sleep.sh:ro
+    secrets:
+      - ssl_full.pem
+      - ssl_key.pem
+      - ssl_ca.pem
+      - ssl_dhparam.pem
+    environment:
+      - BASE_DOMAIN
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - reverseproxy
+
+EOF
+
+    # Add services from services.yaml with swarm-specific config
+    local services_list
+    services_list=$(yq '.services | keys[]' "$SERVICES_CONFIG" | tr -d '"')
+
+    while IFS= read -r service_key; do
+        [ -z "$service_key" ] && continue
+        echo "  Processing swarm config for: $service_key"
+
+        # Get base configuration
+        local image
+        image=$(yq ".services[\"${service_key}\"].container.image" "$SERVICES_CONFIG" 2>/dev/null | tr -d '"')
+        if [ "$image" = "null" ] || [ -z "$image" ]; then
+            image=$(yq ".services[\"${service_key}\"].compose.image" "$SERVICES_CONFIG" 2>/dev/null | tr -d '"')
+        fi
+
+        if [ "$image" != "null" ] && [ -n "$image" ]; then
+            # Add service to swarm stack
+            cat >> "$SWARM_STACK" <<EOF
+  # Generated from services.yaml: $service_key
+  ${service_key}:
+    image: $image
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - reverseproxy
+
+EOF
+        fi
+    done <<< "$services_list"
+
+    # Add infrastructure sections
+    cat >> "$SWARM_STACK" <<EOF
+# Infrastructure Configuration
+secrets:
+  ssl_full.pem:
+    external: true
+  ssl_key.pem:
+    external: true
+  ssl_ca.pem:
+    external: true
+  ssl_dhparam.pem:
+    external: true
+
+networks:
+  reverseproxy:
+    driver: overlay  # Enable cross-node communication
+    attachable: true
+EOF
+
+    echo "✅ Generated Docker Swarm stack at $SWARM_STACK"
+    return 0
+}
+
 # Function: generate_all_from_services
 # Description: Generates all deployment files from services.yaml
 # Arguments: None
@@ -390,6 +496,7 @@ generate_all_from_services() {
     generate_compose_from_services || return 1
     generate_nginx_from_services || return 1
     generate_domains_from_services || return 1
+    generate_swarm_stack_from_services || return 1
 
     echo "✅ All deployment files generated successfully!"
     return 0
