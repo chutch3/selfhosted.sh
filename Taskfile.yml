@@ -1,0 +1,100 @@
+version: "3"
+
+vars:
+  PROJECT_NAME: homelab
+  PYTHON_VERSION: "3.8"
+
+tasks:
+  install:
+    desc: Install project dependencies
+    cmds:
+      - poetry install
+      - poetry run pre-commit install
+
+  test:
+    desc: Run all tests
+    cmds:
+      - bats tests/unit/**/*.bats
+
+  test-fast:
+    desc: Run tests with faster execution
+    cmds:
+      - bats --tap tests/unit/**/*.bats
+
+  lint:
+    desc: Run all linting checks
+    deps: ["lint:shell", "lint:yaml", "lint:dockerfile", "lint:secrets"]
+
+  lint:shell:
+    desc: Run shellcheck on shell scripts
+    cmds:
+      - poetry run shellcheck -x scripts/**/*.sh selfhosted.sh
+
+  lint:yaml:
+    desc: Run yamllint on YAML files
+    cmds:
+      - poetry run yamllint .
+
+  lint:dockerfile:
+    desc: Run hadolint on Dockerfiles (using pre-commit)
+    cmds:
+      - poetry run pre-commit run hadolint --all-files
+
+  lint:secrets:
+    desc: Run gitleaks to check for secrets (via pre-commit)
+    cmds:
+      - poetry run pre-commit run gitleaks --all-files
+
+  lint:python:
+    desc: Run pre-commit hooks (includes Python linting)
+    cmds:
+      - poetry run pre-commit run --all-files
+
+  static-analysis:
+    desc: Run static analysis tools
+    deps: [lint, "security-scan"]
+
+  security-scan:
+    desc: Run security scanning (via pre-commit)
+    cmds:
+      - poetry run pre-commit run gitleaks --all-files
+
+  format:
+    desc: Format code
+    cmds:
+      - poetry run pre-commit run --all-files
+
+  clean:
+    desc: Clean up generated files and caches
+    cmds:
+      - rm -rf .pytest_cache
+      - rm -rf __pycache__
+      - find . -name "*.pyc" -delete
+      - find . -name ".bats-*" -delete
+
+  check:
+    desc: Run all checks (lint, test, static analysis)
+    deps: [lint, test, "static-analysis"]
+
+  ci:
+    desc: Run CI pipeline (used by GitHub Actions)
+    deps: [check]
+
+  release:prepare:
+    desc: Prepare for release (run all checks)
+    deps: [check]
+
+  release:version:
+    desc: Check what the next version would be
+    cmds:
+      - poetry run semantic-release version --print
+
+  release:publish:
+    desc: Publish a new release (for local testing)
+    cmds:
+      - poetry run semantic-release publish
+
+  help:
+    desc: Show available tasks
+    cmds:
+      - task --list
