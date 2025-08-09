@@ -26,9 +26,17 @@ get_all_services() {
         return 1
     fi
 
-    # Use -r flag for raw output and filter out any lines starting with # (comments)
-    yq -r '.services | keys[]' "$SERVICES_CONFIG" 2>/dev/null | grep -v '^#' | tr -d '"' || \
-    yq '.services | keys[]' "$SERVICES_CONFIG" | grep -v '^#' | tr -d '"'
+    # Use yq-agnostic approach: extract service names using awk
+    # This finds entries under the 'services:' section only
+    awk '
+        /^services:/ { in_services = 1; next }
+        in_services && /^[a-zA-Z]/ && !/^  / { in_services = 0 }
+        in_services && /^  [a-zA-Z0-9_-]+:/ {
+            gsub(/^  /, "");
+            gsub(/:.*/, "");
+            print
+        }
+    ' "$SERVICES_CONFIG" | sort
 }
 
 # Function: get_service_dependencies
@@ -42,15 +50,26 @@ get_service_dependencies() {
         return 1
     fi
 
-    if ! yq ".services[\"${service}\"]" "$SERVICES_CONFIG" | grep -q -v null; then
+    # Check if service exists using grep
+    if ! grep -q "^  ${service}:" "$SERVICES_CONFIG"; then
         echo "❌ Error: Service '$service' not found" >&2
         return 1
     fi
 
-    # Check if service has dependencies
-    if yq ".services[\"${service}\"].depends_on" "$SERVICES_CONFIG" | grep -q -v null; then
-        yq ".services[\"${service}\"].depends_on[]" "$SERVICES_CONFIG" | tr -d '"'
-    fi
+    # Extract dependencies using awk - this is yq-agnostic
+    awk "
+        /^  ${service}:/ { in_service = 1; next }
+        in_service && /^  [a-zA-Z0-9_-]+:/ { in_service = 0 }
+        in_service && /^    depends_on:/ { in_depends = 1; next }
+        in_service && in_depends && /^      - / {
+            gsub(/^      - /, \"\");
+            gsub(/[\"']/, \"\");
+            print;
+            next
+        }
+        in_service && in_depends && /^    [a-zA-Z0-9_-]+:/ { in_depends = 0 }
+        in_service && in_depends && /^  [a-zA-Z0-9_-]+:/ { in_service = 0; in_depends = 0 }
+    " "$SERVICES_CONFIG"
 }
 
 # Function: get_service_priority
