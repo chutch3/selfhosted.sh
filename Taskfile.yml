@@ -8,7 +8,7 @@ tasks:
   install:
     desc: Install project dependencies
     cmds:
-      - poetry install
+      - poetry install --no-root
       - poetry run pre-commit install
 
   test:
