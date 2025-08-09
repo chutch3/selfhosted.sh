@@ -161,12 +161,13 @@ make_dhparam() {
 up() {
     load_env
 
-    # source build_domain.sh and invoke build_domains_file
+    # Generate domains from services.yaml instead of legacy build_domain.sh
     # shellcheck source=/dev/null
-    source "${PROJECT_ROOT}/scripts/build_domain.sh"
+    source "${PROJECT_ROOT}/scripts/service_generator.sh"
+    generate_domains_from_services
 
     set -a
-    # .domains file is created dynamically by build_domain.sh
+    # .domains file is created dynamically by generate_domains_from_services
     # shellcheck source=/dev/null
     source "${DOMAIN_FILE}"
     set +a
