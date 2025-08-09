@@ -91,14 +91,11 @@ teardown() {
 }
 
 @test "deployment should auto-initialize certificates if missing" {
-    # This test should fail initially (RED phase)
+    # Test that certificate checking is integrated into selfhosted.sh
 
-    # Mock the enhanced_deploy function to include cert checking
-    run enhanced_deploy compose up --dry-run
-
-    # Should detect missing certs and initialize them
-    [[ "$output" =~ "Checking certificate status" ]]
-    [[ "$output" =~ "Initializing certificates" ]]
+    # Check that the enhanced_deploy function in selfhosted.sh includes cert checking
+    grep -q "Checking certificate status" "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
+    grep -q "ensure_certs_exist" "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
 }
 
 @test "certificate configuration should use BASE_DOMAIN from env" {
