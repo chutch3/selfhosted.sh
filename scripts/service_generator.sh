@@ -502,6 +502,261 @@ generate_all_from_services() {
     return 0
 }
 
+# Function: enable_services_via_yaml
+# Description: Marks services as enabled in services.yaml
+# Arguments: service names (space-separated)
+# Returns: 0 on success, 1 on failure
+enable_services_via_yaml() {
+    if [ ! -f "$SERVICES_CONFIG" ]; then
+        echo "❌ Error: Services configuration not found at $SERVICES_CONFIG"
+        return 1
+    fi
+
+    local services=("$@")
+
+    for service in "${services[@]}"; do
+        echo "✅ Enabling service: $service"
+
+        # Check if service exists in config
+        if ! yq ".services | has(\"$service\")" "$SERVICES_CONFIG" | grep -q "true"; then
+            echo "❌ Error: Service '$service' not found in configuration"
+            return 1
+        fi
+
+        # Set enabled: true for the service
+        yq --yaml-output --in-place ".services[\"$service\"].enabled = true" "$SERVICES_CONFIG"
+    done
+
+    echo "🎉 Successfully enabled ${#services[@]} service(s)"
+    return 0
+}
+
+# Function: disable_services_via_yaml
+# Description: Marks services as disabled in services.yaml
+# Arguments: service names (space-separated)
+# Returns: 0 on success, 1 on failure
+disable_services_via_yaml() {
+    if [ ! -f "$SERVICES_CONFIG" ]; then
+        echo "❌ Error: Services configuration not found at $SERVICES_CONFIG"
+        return 1
+    fi
+
+    local services=("$@")
+
+    for service in "${services[@]}"; do
+        echo "❌ Disabling service: $service"
+
+        # Check if service exists in config
+        if ! yq ".services | has(\"$service\")" "$SERVICES_CONFIG" | grep -q "true"; then
+            echo "❌ Error: Service '$service' not found in configuration"
+            return 1
+        fi
+
+        # Set enabled: false for the service
+        yq --yaml-output --in-place ".services[\"$service\"].enabled = false" "$SERVICES_CONFIG"
+    done
+
+    echo "🎉 Successfully disabled ${#services[@]} service(s)"
+    return 0
+}
+
+# Function: list_enabled_services_from_yaml
+# Description: Lists all services marked as enabled in services.yaml
+# Arguments: None
+# Returns: 0 on success, 1 on failure
+list_enabled_services_from_yaml() {
+    if [ ! -f "$SERVICES_CONFIG" ]; then
+        echo "❌ Error: Services configuration not found at $SERVICES_CONFIG"
+        return 1
+    fi
+
+    echo "📋 Enabled services:"
+
+    # Get all services where enabled = true
+    local enabled_services
+    enabled_services=$(yq '.services | to_entries | map(select(.value.enabled == true)) | .[].key' "$SERVICES_CONFIG" | tr -d '"')
+
+    if [ -z "$enabled_services" ]; then
+        echo "   No services currently enabled"
+        return 0
+    fi
+
+    echo "$enabled_services" | while read -r service; do
+        [ -n "$service" ] && echo "  ✅ $service"
+    done
+
+    return 0
+}
+
+# Function: generate_enabled_services_from_yaml
+# Description: Creates .enabled-services file from services.yaml for backward compatibility
+# Arguments: None
+# Returns: 0 on success, 1 on failure
+generate_enabled_services_from_yaml() {
+    if [ ! -f "$SERVICES_CONFIG" ]; then
+        echo "❌ Error: Services configuration not found at $SERVICES_CONFIG"
+        return 1
+    fi
+
+    local enabled_services_file="${PROJECT_ROOT}/.enabled-services"
+
+    echo "📝 Generating .enabled-services file from services.yaml..."
+
+    # Get all services where enabled = true and write to file
+    yq '.services | to_entries | map(select(.value.enabled == true)) | .[].key' "$SERVICES_CONFIG" | tr -d '"' > "$enabled_services_file"
+
+    local count
+    count=$(wc -l < "$enabled_services_file")
+    echo "✅ Generated .enabled-services with $count enabled service(s)"
+
+    return 0
+}
+
+# Function: start_enabled_services_modern
+# Description: Starts services marked as enabled in services.yaml using docker compose
+# Arguments: None
+# Returns: 0 on success, 1 on failure
+start_enabled_services_modern() {
+    if [ ! -f "$SERVICES_CONFIG" ]; then
+        echo "❌ Error: Services configuration not found at $SERVICES_CONFIG"
+        return 1
+    fi
+
+    echo "🚀 Starting enabled services from services.yaml..."
+
+    # Get enabled services as comma-separated list
+    local enabled_services
+    enabled_services=$(yq '.services | to_entries | map(select(.value.enabled == true)) | .[].key' "$SERVICES_CONFIG" | tr -d '"' | tr '\n' ',' | sed 's/,$//')
+
+    if [ -z "$enabled_services" ]; then
+        echo "⚠️  No services enabled, nothing to start"
+        return 0
+    fi
+
+    echo "Starting services: $enabled_services"
+
+    # Use docker compose with service selection
+    # shellcheck disable=SC2086
+    docker compose up -d $enabled_services
+
+    return 0
+}
+
+# Function: migrate_from_legacy_enabled_services
+# Description: Migrates from .enabled-services file to services.yaml enabled flags
+# Arguments: None
+# Returns: 0 on success, 1 on failure
+migrate_from_legacy_enabled_services() {
+    local legacy_file="${PROJECT_ROOT}/.enabled-services"
+
+    if [ ! -f "$legacy_file" ]; then
+        echo "ℹ️  No legacy .enabled-services file found, migration not needed"
+        return 0
+    fi
+
+    if [ ! -f "$SERVICES_CONFIG" ]; then
+        echo "❌ Error: Services configuration not found at $SERVICES_CONFIG"
+        return 1
+    fi
+
+    echo "🔄 Migrating from legacy .enabled-services to services.yaml..."
+
+    # First, set all services to disabled
+    yq --yaml-output --in-place '.services |= with_entries(.value.enabled = false)' "$SERVICES_CONFIG"
+
+    # Read legacy file and enable those services
+    while IFS= read -r service; do
+        [ -z "$service" ] && continue
+        echo "  Migrating: $service"
+
+        if yq ".services | has(\"$service\")" "$SERVICES_CONFIG" | grep -q "true"; then
+            yq --yaml-output --in-place ".services[\"$service\"].enabled = true" "$SERVICES_CONFIG"
+        else
+            echo "  ⚠️  Warning: Service '$service' not found in services.yaml, skipping"
+        fi
+    done < "$legacy_file"
+
+    # Backup and remove legacy file
+    cp "$legacy_file" "${legacy_file}.backup"
+    rm "$legacy_file"
+
+    echo "✅ Migration completed. Legacy file backed up to .enabled-services.backup"
+    return 0
+}
+
+# Function: interactive_service_enablement
+# Description: Provides interactive service selection interface
+# Arguments: None
+# Returns: 0 on success, 1 on failure
+interactive_service_enablement() {
+    if [ ! -f "$SERVICES_CONFIG" ]; then
+        echo "❌ Error: Services configuration not found at $SERVICES_CONFIG"
+        return 1
+    fi
+
+    echo "🎛️  Interactive Service Enablement"
+    echo "======================================"
+    echo ""
+
+    # Get all available services with their current enabled state
+    echo "Available services:"
+
+    local services=()
+    local service_names=()
+    local i=1
+
+    # Build arrays of services and their info
+    while IFS= read -r service_key; do
+        service_key=$(echo "$service_key" | tr -d '"')
+        [ -z "$service_key" ] && continue
+
+        services+=("$service_key")
+        service_names+=("$service_key")
+
+        local name enabled
+        name=$(yq ".services[\"${service_key}\"].name" "$SERVICES_CONFIG" | tr -d '"')
+        enabled=$(yq ".services[\"${service_key}\"].enabled" "$SERVICES_CONFIG")
+
+        local status=""
+        if [ "$enabled" = "true" ]; then
+            status=" ✅"
+        fi
+
+        printf "  %2d. %-20s" "$i" "$service_key"
+        [ "$name" != "null" ] && printf " - %s" "$name"
+        printf "%s\n" "$status"
+
+        i=$((i + 1))
+    done < <(yq '.services | keys[]' "$SERVICES_CONFIG")
+
+    echo ""
+    echo "Enter the numbers of services to toggle (space-separated):"
+    read -r -a selections
+
+    # Process selections
+    for num in "${selections[@]}"; do
+        if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#services[@]}" ]; then
+            local service="${services[$((num - 1))]}"
+            local current_state
+            current_state=$(yq ".services[\"${service}\"].enabled" "$SERVICES_CONFIG")
+
+            if [ "$current_state" = "true" ]; then
+                disable_services_via_yaml "$service"
+            else
+                enable_services_via_yaml "$service"
+            fi
+        else
+            echo "⚠️  Invalid selection: $num"
+        fi
+    done
+
+    echo ""
+    echo "Current enabled services:"
+    list_enabled_services_from_yaml
+
+    return 0
+}
+
 # Function: list_available_services_from_config
 # Description: Lists all available services from services.yaml with metadata
 # Arguments: None

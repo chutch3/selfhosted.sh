@@ -1,0 +1,106 @@
+# Generated Docker Swarm stack from config/services.yaml
+# DO NOT EDIT - This file is auto-generated
+# Generated Sat Aug  9 03:13:52 PM EDT 2025
+
+services:
+  # Reverse Proxy (Infrastructure)
+  reverseproxy:
+    image: nginx:alpine
+    deploy:
+      mode: global  # Run on all nodes
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - ${PWD}/config/services/reverseproxy/templates/conf.d/enabled:/etc/nginx/templates/enabled:ro
+      - ${PWD}/config/services/reverseproxy/templates/includes:/etc/nginx/templates/includes:ro
+      - ${PWD}/config/services/reverseproxy/backend-not-found.html:/var/www/html/backend-not-found.html:ro
+      - ${PWD}/config/services/reverseproxy/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${PWD}/scripts/sleep.sh:/docker-entrypoint.d/99-sleep.sh:ro
+    secrets:
+      - ssl_full.pem
+      - ssl_key.pem
+      - ssl_ca.pem
+      - ssl_dhparam.pem
+    environment:
+      - BASE_DOMAIN
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - reverseproxy
+
+  # Generated from services.yaml: actual
+  actual:
+    image: docker.io/actualbudget/actual-server:latest
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - reverseproxy
+
+  # Generated from services.yaml: cryptpad
+  cryptpad:
+    image: promasu/cryptpad:version-2024.6.0
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - reverseproxy
+
+  # Generated from services.yaml: homeassistant
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - reverseproxy
+
+  # Generated from services.yaml: homepage
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - reverseproxy
+
+  # Generated from services.yaml: photoprism
+  photoprism:
+    image: photoprism/photoprism:latest
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - reverseproxy
+
+  # Generated from services.yaml: portainer_agent
+  portainer_agent:
+    image: portainer/agent:2.19.4
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - reverseproxy
+
+# Infrastructure Configuration
+secrets:
+  ssl_full.pem:
+    external: true
+  ssl_key.pem:
+    external: true
+  ssl_ca.pem:
+    external: true
+  ssl_dhparam.pem:
+    external: true
+
+networks:
+  reverseproxy:
+    driver: overlay  # Enable cross-node communication
+    attachable: true
