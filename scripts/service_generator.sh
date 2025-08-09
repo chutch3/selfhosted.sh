@@ -55,9 +55,35 @@ EOF
         } >> "$GENERATED_COMPOSE"
     done
 
+    # Add ACME certificate service
+    cat >> "$GENERATED_COMPOSE" <<EOF
+  # Certificate Management Service
+  acme:
+    image: neilpang/acme.sh
+    container_name: acme.sh
+    command: daemon
+    volumes:
+      - \${PWD}/certs:/acme.sh
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DEPLOY_DOCKER_CONTAINER_LABEL=sh.acme.autoload.domain=\${BASE_DOMAIN}
+      - DEPLOY_DOCKER_CONTAINER_KEY_FILE=/etc/nginx/ssl/\${BASE_DOMAIN}/key.pem
+      - DEPLOY_DOCKER_CONTAINER_CERT_FILE=/etc/nginx/ssl/\${BASE_DOMAIN}/cert.pem
+      - DEPLOY_DOCKER_CONTAINER_CA_FILE=/etc/nginx/ssl/\${BASE_DOMAIN}/ca.pem
+      - DEPLOY_DOCKER_CONTAINER_FULLCHAIN_FILE=/etc/nginx/ssl/\${BASE_DOMAIN}/full.pem
+      - DEPLOY_DOCKER_CONTAINER_RELOAD_CMD="service nginx force-reload"
+    env_file:
+      - path: .env
+        required: true
+      - path: .domains
+        required: true
+    networks:
+      - reverseproxy
+
+EOF
+
     # Add networks section
     cat >> "$GENERATED_COMPOSE" <<EOF
-
 networks:
   reverseproxy:
     driver: bridge
@@ -852,6 +878,365 @@ validate_services_config() {
     return 0
 }
 
+# Function: generate_certificate_management
+# Description: Generates certificate management scripts and configuration
+# Arguments: generated_dir - Target directory for generated files
+# Returns: 0 on success, 1 on failure
+generate_certificate_management() {
+    local generated_dir="$1"
+    local cert_dir="$generated_dir/certificates"
+
+    # Load environment for domain configuration
+    if [ -f "$PROJECT_ROOT/.env" ]; then
+        source "$PROJECT_ROOT/.env"
+    fi
+
+    # Set defaults if not in environment
+    BASE_DOMAIN="${BASE_DOMAIN:-example.com}"
+    WILDCARD_DOMAIN="${WILDCARD_DOMAIN:-*.${BASE_DOMAIN}}"
+
+    # Generate ACME configuration
+    cat > "$cert_dir/acme-config.yaml" <<EOF
+# ACME Configuration for ${BASE_DOMAIN}
+# Generated from config/services.yaml
+# DO NOT EDIT - This file is auto-generated
+
+version: '3.8'
+
+services:
+  acme:
+    image: neilpang/acme.sh:latest
+    container_name: acme.sh
+    volumes:
+      - "\${PWD}/certs/:/acme.sh/"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      - CF_Token=\${CF_Token}
+      - CF_Email=\${CF_Email}
+      - CF_Key=\${CF_Key}
+    command: daemon
+    networks:
+      - default
+EOF
+
+    # Generate certificate initialization script (deployment-agnostic)
+    cat > "$cert_dir/cert-init.sh" <<EOF
+#!/bin/bash
+# Certificate Initialization Script
+# Generated from config/services.yaml
+# DO NOT EDIT - This file is auto-generated
+#
+# This script works with both Docker Compose and Docker Swarm deployments
+
+set -e
+
+# Load environment
+if [ -f "../../.env" ]; then
+    source "../../.env"
+elif [ -f ".env" ]; then
+    source ".env"
+else
+    echo "❌ Error: .env file not found"
+    exit 1
+fi
+
+echo "🔐 Initializing certificates for ${BASE_DOMAIN}..."
+
+# Check if certificates already exist
+if [ -d "../../certs/${BASE_DOMAIN}_ecc" ]; then
+    echo "✅ Certificates already exist for ${BASE_DOMAIN}"
+    exit 0
+fi
+
+# Use standalone Docker approach (works for both Compose and Swarm)
+echo "🚀 Starting standalone ACME container..."
+docker run -d --name acme-temp \\
+    -v "\${PWD}/../../certs:/acme.sh" \\
+    -v "/var/run/docker.sock:/var/run/docker.sock" \\
+    -e "CF_Token=\${CF_Token}" \\
+    -e "CF_Email=\${CF_Email}" \\
+    -e "CF_Key=\${CF_Key}" \\
+    neilpang/acme.sh:latest daemon
+
+# Wait for container to be ready
+sleep 5
+
+# Upgrade ACME.sh
+echo "⬆️ Upgrading ACME.sh..."
+docker exec acme-temp acme.sh --upgrade
+
+# Issue certificate
+echo "📜 Issuing certificate for ${BASE_DOMAIN} and ${WILDCARD_DOMAIN}..."
+docker exec acme-temp acme.sh --issue \\
+    --dns dns_cf \\
+    -d "${BASE_DOMAIN}" \\
+    -d "${WILDCARD_DOMAIN}" \\
+    --server letsencrypt
+
+# Generate DH parameters
+echo "🔑 Generating DH parameters..."
+docker exec acme-temp openssl dhparam -out /acme.sh/dhparam.pem 2048
+
+# Cleanup temporary container
+echo "🧹 Cleaning up temporary container..."
+docker stop acme-temp && docker rm acme-temp
+
+echo "✅ Certificate initialization complete!"
+echo "📁 Certificates stored in: ../../certs/${BASE_DOMAIN}_ecc/"
+echo ""
+echo "🎯 Next steps based on your deployment:"
+echo "   • Docker Compose: Certificates are ready for volume mounting"
+echo "   • Docker Swarm: Run 'swarm_setup_certificates' to create secrets"
+EOF
+
+    # Generate certificate checker script
+    cat > "$cert_dir/check-certs.sh" <<'EOF'
+#!/bin/bash
+# Certificate Status Checker
+# Generated from config/services.yaml
+# DO NOT EDIT - This file is auto-generated
+
+# Load environment
+if [ -f "../../.env" ]; then
+    source "../../.env"
+elif [ -f ".env" ]; then
+    source ".env"
+else
+    echo "❌ Error: .env file not found"
+    exit 1
+fi
+
+CERT_DIR="../../certs/${BASE_DOMAIN}_ecc"
+
+echo "🔐 Checking certificate status for ${BASE_DOMAIN}..."
+
+if [ ! -d "$CERT_DIR" ]; then
+    echo "❌ Certificate directory not found: $CERT_DIR"
+    echo "💡 Run: ./cert-init.sh to initialize certificates"
+    exit 1
+fi
+
+if [ ! -f "$CERT_DIR/fullchain.cer" ]; then
+    echo "❌ Certificate file not found: $CERT_DIR/fullchain.cer"
+    exit 1
+fi
+
+# Check certificate expiry
+echo "📅 Certificate information:"
+openssl x509 -in "$CERT_DIR/fullchain.cer" -noout -dates -subject
+
+# Check if certificate expires within 30 days
+EXPIRY=$(openssl x509 -in "$CERT_DIR/fullchain.cer" -noout -enddate | cut -d= -f2)
+EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s)
+CURRENT_EPOCH=$(date +%s)
+DAYS_LEFT=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+
+if [ $DAYS_LEFT -lt 30 ]; then
+    echo "⚠️ Certificate expires in $DAYS_LEFT days - renewal recommended"
+    exit 2
+elif [ $DAYS_LEFT -lt 7 ]; then
+    echo "🚨 Certificate expires in $DAYS_LEFT days - urgent renewal needed"
+    exit 3
+else
+    echo "✅ Certificate valid for $DAYS_LEFT more days"
+fi
+EOF
+
+    # Generate certificate renewal script
+    cat > "$cert_dir/renew-certs.sh" <<'EOF'
+#!/bin/bash
+# Certificate Renewal Script
+# Generated from config/services.yaml
+# DO NOT EDIT - This file is auto-generated
+
+set -e
+
+# Load environment
+if [ -f "../../.env" ]; then
+    source "../../.env"
+elif [ -f ".env" ]; then
+    source ".env"
+else
+    echo "❌ Error: .env file not found"
+    exit 1
+fi
+
+echo "🔄 Renewing certificates for ${BASE_DOMAIN}..."
+
+# Start ACME container if not running
+if ! docker ps | grep -q acme.sh; then
+    echo "🚀 Starting ACME container..."
+    docker compose -f acme-config.yaml up -d
+    sleep 5
+fi
+
+# Renew certificate
+echo "📜 Renewing certificate..."
+if docker exec acme.sh acme.sh --renew -d "${BASE_DOMAIN}"; then
+    echo "✅ Certificate renewal successful!"
+
+    # Restart services that use certificates
+    echo "🔄 Restarting services with certificates..."
+    cd ../deployments
+    docker compose restart reverseproxy
+
+else
+    echo "❌ Certificate renewal failed"
+    exit 1
+fi
+EOF
+
+    # Generate deployment-specific certificate setup script
+    cat > "$cert_dir/setup-for-deployment.sh" <<EOF
+#!/bin/bash
+# Deployment-Specific Certificate Setup
+# Generated from config/services.yaml
+# DO NOT EDIT - This file is auto-generated
+
+set -e
+
+# Load environment
+if [ -f "../../.env" ]; then
+    source "../../.env"
+elif [ -f ".env" ]; then
+    source ".env"
+else
+    echo "❌ Error: .env file not found"
+    exit 1
+fi
+
+DEPLOYMENT_TYPE="\$1"
+
+if [ -z "\$DEPLOYMENT_TYPE" ]; then
+    echo "❌ Error: Deployment type required"
+    echo "💡 Usage: \$0 {compose|swarm}"
+    exit 1
+fi
+
+# Check if certificates exist
+if [ ! -d "../../certs/${BASE_DOMAIN}_ecc" ]; then
+    echo "❌ Certificates not found. Run ./cert-init.sh first"
+    exit 1
+fi
+
+case "\$DEPLOYMENT_TYPE" in
+    "compose")
+        echo "🐳 Setting up certificates for Docker Compose..."
+        echo "✅ Certificates are ready for volume mounting in docker-compose.yaml"
+        echo "📁 Certificate directory: ../../certs/${BASE_DOMAIN}_ecc/"
+        ;;
+    "swarm")
+        echo "🐝 Setting up certificates for Docker Swarm..."
+
+        # Create Docker secrets from certificate files
+        echo "🔐 Creating Docker secrets..."
+
+        # Remove existing secrets if they exist (ignore errors)
+        docker secret rm ssl_full.pem ssl_key.pem ssl_ca.pem ssl_dhparam.pem 2>/dev/null || true
+
+        # Create new secrets
+        docker secret create ssl_full.pem "../../certs/${BASE_DOMAIN}_ecc/fullchain.cer"
+        docker secret create ssl_key.pem "../../certs/${BASE_DOMAIN}_ecc/${BASE_DOMAIN}.key"
+        docker secret create ssl_ca.pem "../../certs/${BASE_DOMAIN}_ecc/ca.cer"
+        docker secret create ssl_dhparam.pem "../../certs/dhparam.pem"
+
+        echo "✅ Docker secrets created successfully"
+        echo "📋 Created secrets: ssl_full.pem, ssl_key.pem, ssl_ca.pem, ssl_dhparam.pem"
+        ;;
+    *)
+        echo "❌ Unknown deployment type: \$DEPLOYMENT_TYPE"
+        echo "💡 Supported types: compose, swarm"
+        exit 1
+        ;;
+esac
+EOF
+
+    # Generate certificate status script (no Docker dependency)
+    cat > "$cert_dir/cert-status.sh" <<'EOF'
+#!/bin/bash
+# Certificate Status (No Docker)
+# Generated from config/services.yaml
+# DO NOT EDIT - This file is auto-generated
+
+# Load environment
+if [ -f "../../.env" ]; then
+    source "../../.env"
+elif [ -f ".env" ]; then
+    source ".env"
+else
+    echo "❌ Error: .env file not found"
+    exit 1
+fi
+
+CERT_DIR="../../certs/${BASE_DOMAIN}_ecc"
+
+echo "🔐 Certificate Status for ${BASE_DOMAIN}"
+echo "=================================="
+
+if [ ! -d "$CERT_DIR" ]; then
+    echo "Status: ❌ NOT INITIALIZED"
+    echo "Directory: $CERT_DIR (missing)"
+    exit 1
+fi
+
+if [ ! -f "$CERT_DIR/fullchain.cer" ]; then
+    echo "Status: ❌ INCOMPLETE"
+    echo "Certificate file missing: fullchain.cer"
+    exit 1
+fi
+
+# Certificate details
+echo "Status: ✅ EXISTS"
+echo "Directory: $CERT_DIR"
+echo "Certificate file: fullchain.cer"
+
+# Expiry information
+EXPIRY=$(openssl x509 -in "$CERT_DIR/fullchain.cer" -noout -enddate | cut -d= -f2)
+echo "Expires: $EXPIRY"
+
+# Days until expiry
+EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s)
+CURRENT_EPOCH=$(date +%s)
+DAYS_LEFT=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+
+if [ $DAYS_LEFT -lt 0 ]; then
+    echo "Status: 🚨 EXPIRED ($DAYS_LEFT days ago)"
+elif [ $DAYS_LEFT -lt 7 ]; then
+    echo "Status: 🚨 EXPIRES SOON ($DAYS_LEFT days)"
+elif [ $DAYS_LEFT -lt 30 ]; then
+    echo "Status: ⚠️ RENEWAL DUE ($DAYS_LEFT days)"
+else
+    echo "Status: ✅ VALID ($DAYS_LEFT days remaining)"
+fi
+
+# Additional files check
+echo ""
+echo "Certificate Files:"
+for file in fullchain.cer "${BASE_DOMAIN}.key" ca.cer; do
+    if [ -f "$CERT_DIR/$file" ]; then
+        echo "  ✅ $file"
+    else
+        echo "  ❌ $file (missing)"
+    fi
+done
+
+if [ -f "../../certs/dhparam.pem" ]; then
+    echo "  ✅ dhparam.pem"
+else
+    echo "  ❌ dhparam.pem (missing)"
+fi
+EOF
+
+    # Make scripts executable
+    chmod +x "$cert_dir/cert-init.sh"
+    chmod +x "$cert_dir/check-certs.sh"
+    chmod +x "$cert_dir/renew-certs.sh"
+    chmod +x "$cert_dir/setup-for-deployment.sh"
+    chmod +x "$cert_dir/cert-status.sh"
+
+    return 0
+}
+
 # Function: generate_all_to_generated_dir
 # Description: Generates all files to a consolidated generated/ directory structure
 # Arguments: None
@@ -870,6 +1255,7 @@ generate_all_to_generated_dir() {
     mkdir -p "$generated_dir/deployments"
     mkdir -p "$generated_dir/nginx/templates"
     mkdir -p "$generated_dir/config"
+    mkdir -p "$generated_dir/certificates"
 
     # Generate README
     cat > "$generated_dir/README.md" <<EOF
@@ -887,6 +1273,12 @@ generated/
 │   └── swarm-stack.yaml     # Docker Swarm stack
 ├── nginx/                 # Nginx configurations
 │   └── templates/         # Generated nginx templates
+├── certificates/          # Certificate management
+│   ├── acme-config.yaml   # ACME client configuration
+│   ├── cert-init.sh       # Certificate initialization script
+│   ├── check-certs.sh     # Certificate status checker
+│   ├── renew-certs.sh     # Certificate renewal script
+│   └── cert-status.sh     # Certificate status without Docker
 ├── config/                # Configuration files
 │   ├── domains.env        # Domain environment variables
 │   └── enabled-services.list # Enabled services (backward compatibility)
@@ -968,10 +1360,15 @@ EOF
         cp "$PROJECT_ROOT/.enabled-services" "$generated_dir/config/enabled-services.list"
     fi
 
+    # Generate certificate management files
+    echo "🔐 Generating certificate management files..."
+    generate_certificate_management "$generated_dir"
+
     echo "✅ Generated consolidated directory structure at $generated_dir"
     echo "📁 Structure created:"
     echo "   - deployments/ (Docker Compose & Swarm configurations)"
     echo "   - nginx/templates/ (Generated nginx templates)"
+    echo "   - certificates/ (Certificate management scripts)"
     echo "   - config/ (Domain variables & enabled services)"
     echo "   - README.md (Documentation)"
     echo "   - .gitignore (Version control rules)"

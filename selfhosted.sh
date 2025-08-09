@@ -626,6 +626,13 @@ enhanced_deploy() {
 
         # Generate .enabled-services file for backward compatibility
         generate_enabled_services_from_yaml
+
+        # Check certificate status and initialize if needed
+        echo "🔐 Checking certificate status..."
+        if ! ensure_certs_exist; then
+            echo "⚠️ Certificate initialization recommended"
+            echo "💡 Certificates will be initialized automatically on first service start"
+        fi
     fi
 
     # Check if target-specific function exists
