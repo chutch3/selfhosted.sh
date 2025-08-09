@@ -1,8 +1,0 @@
-# Generated files - ignore all content but keep structure
-*
-!README.md
-!.gitignore
-!*/.gitkeep
-
-# Note: All files here are auto-generated from config/services.yaml
-# Run './selfhosted.sh service generate' to regenerate
