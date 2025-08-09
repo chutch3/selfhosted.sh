@@ -160,7 +160,38 @@ teardown() {
 
 @test "detect_circular_dependencies_should_find_circular_refs" {
     # Test circular dependency detection
+
+    # Debug: Show the services.yaml content for debugging
+    SERVICES_CONFIG_PATH="$PROJECT_ROOT/config/services.yaml"
+    echo "DEBUG: Using SERVICES_CONFIG path: $SERVICES_CONFIG_PATH"
+    echo "DEBUG: PROJECT_ROOT: $PROJECT_ROOT"
+    echo "DEBUG: Services config content:"
+    cat "$SERVICES_CONFIG_PATH"
+    echo ""
+
+    # Debug: Show available services
+    echo "DEBUG: Available services:"
+    yq '.services | keys' "$SERVICES_CONFIG_PATH"
+    echo ""
+
+    # Debug: Show circular-a dependencies
+    echo "DEBUG: circular-a dependencies:"
+    yq '.services."circular-a".depends_on // []' "$SERVICES_CONFIG_PATH"
+    echo ""
+
+    # Debug: Show circular-b dependencies
+    echo "DEBUG: circular-b dependencies:"
+    yq '.services."circular-b".depends_on // []' "$SERVICES_CONFIG_PATH"
+    echo ""
+
     run detect_circular_dependencies
+
+    # Debug: Show function output and exit code
+    echo "DEBUG: detect_circular_dependencies exit code: $status"
+    echo "DEBUG: detect_circular_dependencies output:"
+    echo "$output"
+    echo ""
+
     [ "$status" -eq 1 ]  # Should fail with circular dependency
     [[ "$output" == *"Circular dependency detected"* ]]
     # Should mention at least one of the circular services
