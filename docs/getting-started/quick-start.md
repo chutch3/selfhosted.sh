@@ -188,27 +188,24 @@ Once deployment is complete, access your services:
 ## Troubleshooting Quick Fixes
 
 ??? question "Service won't start?"
-    
+
     Check the logs:
     ```bash
     docker compose logs <service-name>
     ```
 
 ??? question "Domain not resolving?"
-    
+
     Verify your DNS settings:
     ```bash
     dig dashboard.yourdomain.com
     ```
 
 ??? question "SSL certificate issues?"
-    
+
     Check certificate status:
     ```bash
     docker compose exec nginx ls -la /etc/nginx/certs/
     ```
 
 [Need more help? See our troubleshooting guide →](../user-guide/troubleshooting.md)
-
-
-

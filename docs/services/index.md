@@ -94,7 +94,7 @@ actual:
   domain: "budget"
   port: 5006
   enabled: true
-  
+
   compose:
     image: "actualbudget/actual-server:latest"
     ports: ["5006:5006"]
@@ -320,7 +320,7 @@ myservice:
   domain: "myapp"
   port: 3000
   enabled: false
-  
+
   compose:
     image: "myapp:latest"
     ports: ["3000:3000"]
@@ -328,7 +328,7 @@ myservice:
       - "ENV_VAR=value"
     volumes:
       - "./data/myapp:/app/data"
-  
+
   nginx:
     upstream: "myservice:3000"
 ```
@@ -371,6 +371,3 @@ New to selfhosted? Start here:
 4. **[First Deployment](../getting-started/first-deployment.md)** - Deploy your services
 
 [Next: Learn about adding services →](adding-services.md)
-
-
-

@@ -171,26 +171,26 @@ graph TB
         CONFIG["📄 config/services.yaml<br/>🏆 SINGLE SOURCE OF TRUTH"]
         CLI["🖥️ Enhanced CLI Interface"]
         GENERATOR["🔧 Generation Engine"]
-        
+
         subgraph "🏗️ Generated Structure"
             DEPLOYMENTS["📦 Deployments<br/>• docker-compose.yaml<br/>• swarm-stack.yaml"]
             NGINX["🌐 Nginx Templates"]
             DOMAINS["🔗 Domain Variables"]
         end
-        
+
         subgraph "🚀 Deployment Targets"
             COMPOSE["🐳 Docker Compose"]
             SWARM["🐝 Docker Swarm"]
             K8S["☸️ Kubernetes"]
         end
     end
-    
+
     CONFIG --> GENERATOR
     CLI --> GENERATOR
     GENERATOR --> DEPLOYMENTS
     GENERATOR --> NGINX
     GENERATOR --> DOMAINS
-    
+
     DEPLOYMENTS --> COMPOSE
     DEPLOYMENTS --> SWARM
     DEPLOYMENTS --> K8S
@@ -225,6 +225,3 @@ Ready to start your self-hosting journey? Choose your path:
 ## 🏷️ Tags
 
 [Browse by tags](tags.md) to find content relevant to your use case.
-
-
-

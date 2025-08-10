@@ -335,13 +335,13 @@ photoprism:
 jellyfin:
   name: "Jellyfin"
   # ... base config
-  
+
   # Docker Compose configuration
   compose:
     image: "jellyfin/jellyfin:latest"
     devices:
       - "/dev/dri:/dev/dri"  # Hardware acceleration
-  
+
   # Docker Swarm overrides
   swarm:
     deploy:
@@ -354,7 +354,7 @@ jellyfin:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-  
+
   # Kubernetes overrides
   kubernetes:
     deployment:
@@ -376,7 +376,7 @@ wordpress:
   dependencies:
     - mysql
     - redis
-  
+
   compose:
     depends_on:
       mysql:
@@ -388,7 +388,7 @@ mysql:
   name: "MySQL Database"
   # ... mysql config
   internal: true  # Not exposed via nginx
-  
+
   compose:
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -405,7 +405,7 @@ Configure health monitoring:
 nextcloud:
   name: "NextCloud"
   # ... other config
-  
+
   compose:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/status.php"]
@@ -413,7 +413,7 @@ nextcloud:
       timeout: 10s
       retries: 3
       start_period: 60s
-  
+
   # Swarm health checks
   swarm:
     deploy:
@@ -439,7 +439,7 @@ profiles:
     services:
       - homepage
       - actual
-  
+
   media_server:
     description: "Complete media management"
     services:
@@ -449,7 +449,7 @@ profiles:
       - radarr
       - qbittorrent
       - photoprism
-  
+
   smart_home:
     description: "Smart home automation"
     services:
@@ -458,7 +458,7 @@ profiles:
       - nodered
       - mosquitto
       - zigbee2mqtt
-  
+
   development:
     description: "Development environment"
     services:
@@ -512,7 +512,7 @@ custom_php_app:
   domain: "${SERVICE_DOMAIN}"
   port: "${SERVICE_PORT:-80}"
   enabled: false
-  
+
   compose:
     image: "${PHP_IMAGE:-php:8.2-apache}"
     ports: ["${SERVICE_PORT:-80}:80"]
@@ -525,7 +525,7 @@ custom_php_app:
       - "./data/${SERVICE_DOMAIN}:/var/www/html"
     depends_on:
       - mysql
-  
+
   nginx:
     upstream: "${SERVICE_DOMAIN}:${SERVICE_PORT:-80}"
     additional_config: |
@@ -632,44 +632,44 @@ Total CPU: 4.5% | Total Memory: 502MB
 ### Common Issues
 
 ??? question "Service won't start?"
-    
+
     ```bash
     # Check service logs
     ./selfhosted service logs actual
-    
+
     # Validate configuration
     ./selfhosted service validate actual
-    
+
     # Check port conflicts
     sudo netstat -tulpn | grep :5006
-    
+
     # Verify Docker image
     docker pull actualbudget/actual-server:latest
     ```
 
 ??? question "Service shows as enabled but not generating?"
-    
+
     ```bash
     # Check service status
     ./selfhosted service status
-    
+
     # Regenerate files
     ./selfhosted service clean
     ./selfhosted service generate
-    
+
     # Validate YAML syntax
     ./selfhosted config validate
     ```
 
 ??? question "Nginx not proxying correctly?"
-    
+
     ```bash
     # Check nginx configuration
     cat generated/nginx/templates/actual.template
-    
+
     # Test nginx config
     docker exec nginx nginx -t
-    
+
     # Reload nginx
     docker exec nginx nginx -s reload
     ```
@@ -688,6 +688,3 @@ export DEBUG=true
 ```
 
 [Next: Learn about deployment options →](deployment-options.md)
-
-
-

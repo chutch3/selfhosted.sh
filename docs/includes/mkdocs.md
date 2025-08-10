@@ -14,6 +14,3 @@
 *[RAM]: Random Access Memory
 *[NFS]: Network File System
 *[K8s]: Kubernetes
-
-
-

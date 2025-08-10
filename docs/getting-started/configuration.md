@@ -124,7 +124,7 @@ services:
     domain: "budget"
     port: 5006
     enabled: true
-    
+
     compose:
       image: "actualbudget/actual-server:latest"
       ports: ["5006:5006"]
@@ -132,7 +132,7 @@ services:
         - "ACTUAL_UPLOAD_FILE_SYNC_SIZE_LIMIT_MB=20"
       volumes:
         - "./data/actual:/app/data"
-    
+
     nginx:
       upstream: "actual_server:5006"
 ```
@@ -148,7 +148,7 @@ services:
     domain: "photos"
     port: 2342
     enabled: false
-    
+
     # Docker Compose configuration
     compose:
       image: "photoprism/photoprism:latest"
@@ -186,7 +186,7 @@ services:
       depends_on:
         - photoprism_mariadb
       restart: unless-stopped
-    
+
     # Docker Swarm specific overrides
     swarm:
       deploy:
@@ -205,7 +205,7 @@ services:
           source: /mnt/media/photos
           target: /photoprism/originals
           read_only: true
-    
+
     # Kubernetes specific overrides
     kubernetes:
       deployment:
@@ -229,7 +229,7 @@ services:
           - secretName: photoprism-tls
             hosts:
               - photos.${BASE_DOMAIN}
-    
+
     # Custom nginx configuration
     nginx:
       upstream: "photoprism:2342"
@@ -237,29 +237,29 @@ services:
         client_max_body_size 500M;
         proxy_read_timeout 600s;
         proxy_send_timeout 600s;
-        
+
         location / {
             proxy_pass http://photoprism:2342;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
-            
+
             # WebSocket support
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
         }
-        
+
         location ~ ^/(api|dav)/ {
             proxy_pass http://photoprism:2342;
             proxy_buffering off;
         }
-    
+
     # Service dependencies (optional)
     dependencies:
       - photoprism_mariadb
-    
+
     # Health check configuration
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:2342/api/v1/status"]
@@ -276,7 +276,7 @@ services:
     port: 3306
     enabled: false
     internal: true  # Not exposed via nginx
-    
+
     compose:
       image: "mariadb:10.9"
       command: mysqld --innodb-buffer-pool-size=128M --transaction-isolation=READ-COMMITTED --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --max-connections=512 --innodb-rollback-on-timeout=OFF --innodb-lock-wait-timeout=120
@@ -305,13 +305,13 @@ volumes:
     path: "./data"
     description: "Local service data storage"
     backup_priority: high
-    
+
   local_media:
     type: local
     path: "/mnt/media"
     description: "Media files storage"
     backup_priority: medium
-    
+
   # NFS storage volumes
   nfs_backup:
     type: nfs
@@ -320,7 +320,7 @@ volumes:
     description: "NFS backup storage"
     mount_options: "nfsvers=4,rsize=1048576,wsize=1048576,hard,intr"
     backup_priority: low
-    
+
   nfs_media:
     type: nfs
     server: "192.168.1.100"
@@ -335,7 +335,7 @@ service_volumes:
     - volume: local_data
       container_path: "/app/data"
       service_path: "actual"
-      
+
   photoprism:
     - volume: nfs_media
       container_path: "/photoprism/originals"
@@ -344,7 +344,7 @@ service_volumes:
     - volume: local_data
       container_path: "/photoprism/storage"
       service_path: "photoprism/storage"
-      
+
   homeassistant:
     - volume: local_data
       container_path: "/config"
@@ -373,7 +373,7 @@ nodes:
       cpu_cores: 8
       memory_gb: 32
       storage_gb: 500
-    
+
   worker1:
     hostname: "worker1.local"
     ip: "192.168.1.11"
@@ -388,7 +388,7 @@ nodes:
       cpu_cores: 4
       memory_gb: 16
       storage_gb: 2000
-    
+
   worker2:
     hostname: "worker2.local"
     ip: "192.168.1.12"
@@ -410,12 +410,12 @@ placement:
   databases:
     constraints:
       - "storage.type==ssd"
-    
+
   # Media services on nodes with large storage
   media:
     constraints:
       - "media.node==true"
-    
+
   # Compute-intensive services
   compute:
     constraints:
@@ -542,6 +542,3 @@ NFS_MOUNT_OPTIONS=nfsvers=4,hard,intr
 ```
 
 [Next: Choose your deployment type →](first-deployment.md)
-
-
-
