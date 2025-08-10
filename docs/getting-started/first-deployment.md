@@ -11,9 +11,9 @@ This guide walks you through your first deployment using different orchestration
     ---
 
     **Best for**: Single node, development, simple production setups
-    
+
     **Pros**: Simple, widely supported, easy to debug
-    
+
     **Cons**: Single point of failure, manual scaling
 
 - :material-docker: **[Docker Swarm](#docker-swarm-deployment)**
@@ -21,9 +21,9 @@ This guide walks you through your first deployment using different orchestration
     ---
 
     **Best for**: Multi-node clusters, high availability, load balancing
-    
+
     **Pros**: Built-in orchestration, secrets management, rolling updates
-    
+
     **Cons**: More complex setup, Docker-specific
 
 - :material-kubernetes: **[Kubernetes](#kubernetes-deployment)**
@@ -31,9 +31,9 @@ This guide walks you through your first deployment using different orchestration
     ---
 
     **Best for**: Large-scale deployments, enterprise environments
-    
+
     **Pros**: Industry standard, advanced features, ecosystem
-    
+
     **Cons**: Complex setup, resource overhead, steep learning curve
 
 </div>
@@ -254,7 +254,7 @@ nodes:
     labels:
       - "node.type=manager"
       - "storage.type=ssd"
-    
+
   worker1:
     hostname: "worker1.local"
     ip: "192.168.1.11"
@@ -353,15 +353,15 @@ volumes:
     driver: nfs
     driver_opts:
       share: "192.168.1.100:/volume1/homepage"
-  
+
   actual_data:
     driver: nfs
     driver_opts:
       share: "192.168.1.100:/volume1/actual"
-  
+
   nginx_config:
     driver: local
-  
+
   nginx_certs:
     driver: local
 
@@ -432,10 +432,10 @@ Kubernetes provides enterprise-grade orchestration with advanced features.
     ```bash
     # Install k3s on master
     curl -sfL https://get.k3s.io | sh -s - server --cluster-init
-    
+
     # Get node token
     sudo cat /var/lib/rancher/k3s/server/node-token
-    
+
     # Join additional nodes
     curl -sfL https://get.k3s.io | K3S_URL=https://master-ip:6443 K3S_TOKEN=token sh -
     ```
@@ -445,12 +445,12 @@ Kubernetes provides enterprise-grade orchestration with advanced features.
     ```bash
     # Initialize cluster
     sudo kubeadm init --pod-network-cidr=10.244.0.0/16
-    
+
     # Configure kubectl
     mkdir -p $HOME/.kube
     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
     sudo chown $(id -u):$(id -g) $HOME/.kube/config
-    
+
     # Install CNI plugin
     kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
     ```
@@ -642,26 +642,26 @@ kubectl port-forward service/actual 5006:5006 -n selfhosted
 ### Docker Compose Issues
 
 ??? question "Services won't start?"
-    
+
     ```bash
     # Check service logs
     docker compose logs service-name
-    
+
     # Check Docker daemon
     systemctl status docker
-    
+
     # Verify network
     docker network ls
     docker network inspect selfhosted
     ```
 
 ??? question "Port conflicts?"
-    
+
     ```bash
     # Check what's using the port
     sudo netstat -tulpn | grep :80
     sudo lsof -i :80
-    
+
     # Stop conflicting services
     sudo systemctl stop apache2
     sudo systemctl stop nginx
@@ -670,14 +670,14 @@ kubectl port-forward service/actual 5006:5006 -n selfhosted
 ### Docker Swarm Issues
 
 ??? question "Node won't join swarm?"
-    
+
     ```bash
     # Check connectivity
     telnet manager-ip 2377
-    
+
     # Regenerate join token
     docker swarm join-token worker
-    
+
     # Check firewall ports
     sudo ufw allow 2377/tcp  # Swarm management
     sudo ufw allow 7946/tcp  # Container network discovery
@@ -685,14 +685,14 @@ kubectl port-forward service/actual 5006:5006 -n selfhosted
     ```
 
 ??? question "Service won't deploy?"
-    
+
     ```bash
     # Check service logs
     docker service logs service-name
-    
+
     # Check placement constraints
     docker service inspect service-name
-    
+
     # List available nodes
     docker node ls
     ```
@@ -700,32 +700,29 @@ kubectl port-forward service/actual 5006:5006 -n selfhosted
 ### Kubernetes Issues
 
 ??? question "Pods stuck in Pending?"
-    
+
     ```bash
     # Check events
     kubectl describe pod pod-name -n selfhosted
-    
+
     # Check node resources
     kubectl describe nodes
-    
+
     # Check persistent volumes
     kubectl get pv,pvc -n selfhosted
     ```
 
 ??? question "Ingress not working?"
-    
+
     ```bash
     # Check ingress controller
     kubectl get pods -n ingress-nginx
-    
+
     # Check ingress configuration
     kubectl describe ingress actual -n selfhosted
-    
+
     # Check DNS resolution
     nslookup budget.yourdomain.com
     ```
 
 [Next: Learn about service management →](../user-guide/service-management.md)
-
-
-

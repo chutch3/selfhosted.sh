@@ -127,7 +127,7 @@ services:
     domain: "budget"
     port: 5006
     enabled: true  # Modern enablement flag
-    
+
     # Docker Compose configuration
     compose:
       image: "actualbudget/actual-server:latest"
@@ -136,13 +136,13 @@ services:
         - "ACTUAL_UPLOAD_FILE_SYNC_SIZE_LIMIT_MB=20"
       volumes:
         - "./data/actual:/app/data"
-    
+
     # Docker Swarm overrides
     swarm:
       deploy:
         mode: replicated
         replicas: 1
-    
+
     # Nginx reverse proxy configuration
     nginx:
       upstream: "actual_server:5006"
@@ -238,7 +238,7 @@ The system supports multiple deployment platforms from the same configuration:
           - ./data/actual:/app/data
         networks:
           - selfhosted
-    
+
     networks:
       selfhosted:
         external: true
@@ -264,11 +264,11 @@ The system supports multiple deployment platforms from the same configuration:
           replicas: 1
         networks:
           - selfhosted
-    
+
     volumes:
       actual_data:
         driver: local
-    
+
     networks:
       selfhosted:
         external: true
@@ -312,10 +312,10 @@ upstream actual_server {
 server {
     listen 443 ssl http2;
     server_name budget.${BASE_DOMAIN};
-    
+
     ssl_certificate /etc/nginx/certs/${BASE_DOMAIN}.crt;
     ssl_certificate_key /etc/nginx/certs/${BASE_DOMAIN}.key;
-    
+
     location / {
         proxy_pass http://actual_server;
         proxy_set_header Host $host;
@@ -363,7 +363,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run Tests
         run: bats tests/unit/**/*.bats
-      
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -372,7 +372,7 @@ jobs:
         run: |
           shellcheck scripts/*.sh
           yamllint config/
-          
+
   release:
     if: github.ref == 'refs/heads/main'
     needs: [test, lint]
@@ -435,6 +435,3 @@ Future plugin system for:
 - Monitoring integrations
 
 [Learn more about specific components →](configuration.md)
-
-
-

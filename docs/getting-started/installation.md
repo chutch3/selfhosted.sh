@@ -20,7 +20,7 @@ This comprehensive guide will walk you through setting up the Selfhosted platfor
     ```bash
     # Update system packages
     sudo apt update && sudo apt upgrade -y
-    
+
     # Install required packages
     sudo apt install -y curl wget git unzip
     ```
@@ -30,7 +30,7 @@ This comprehensive guide will walk you through setting up the Selfhosted platfor
     ```bash
     # Update system packages
     sudo apt update && sudo apt upgrade -y
-    
+
     # Install required packages
     sudo apt install -y curl wget git unzip
     ```
@@ -40,7 +40,7 @@ This comprehensive guide will walk you through setting up the Selfhosted platfor
     ```bash
     # Update system packages
     sudo dnf update -y
-    
+
     # Install required packages
     sudo dnf install -y curl wget git unzip
     ```
@@ -50,7 +50,7 @@ This comprehensive guide will walk you through setting up the Selfhosted platfor
     ```bash
     # Install Homebrew if not already installed
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    
+
     # Install required packages
     brew install git curl wget
     ```
@@ -64,17 +64,17 @@ This comprehensive guide will walk you through setting up the Selfhosted platfor
     ```bash
     # Remove old Docker versions
     sudo apt remove -y docker docker-engine docker.io containerd runc
-    
+
     # Add Docker GPG key
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-    
+
     # Add Docker repository
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
+
     # Install Docker
     sudo apt update
     sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-    
+
     # Add user to docker group
     sudo usermod -aG docker $USER
     newgrp docker
@@ -85,17 +85,17 @@ This comprehensive guide will walk you through setting up the Selfhosted platfor
     ```bash
     # Remove old Docker versions
     sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine
-    
+
     # Add Docker repository
     sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-    
+
     # Install Docker
     sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-    
+
     # Start and enable Docker
     sudo systemctl start docker
     sudo systemctl enable docker
-    
+
     # Add user to docker group
     sudo usermod -aG docker $USER
     newgrp docker
@@ -369,7 +369,7 @@ docker compose version
 ## Troubleshooting
 
 ??? question "Docker permission denied?"
-    
+
     Make sure your user is in the docker group:
     ```bash
     sudo usermod -aG docker $USER
@@ -377,7 +377,7 @@ docker compose version
     ```
 
 ??? question "Cloudflare API not working?"
-    
+
     Test your API credentials:
     ```bash
     curl -X GET "https://api.cloudflare.com/client/v4/zones" \
@@ -386,7 +386,7 @@ docker compose version
     ```
 
 ??? question "Domain not resolving?"
-    
+
     Check your DNS configuration:
     ```bash
     dig @8.8.8.8 yourdomain.com
@@ -394,13 +394,10 @@ docker compose version
     ```
 
 ??? question "Services won't start?"
-    
+
     Check Docker logs:
     ```bash
     docker compose logs
     ```
 
 [Need more help? See our full troubleshooting guide →](../user-guide/troubleshooting.md)
-
-
-

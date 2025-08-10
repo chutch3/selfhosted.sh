@@ -3,7 +3,7 @@
 Our mission is to create the ultimate self-hosting platform that makes running your own services as simple as possible while maintaining security, reliability, and flexibility.
 
 !!! success "✅ **Production-Ready Platform Complete**"
-    
+
     The core platform is fully functional with comprehensive testing and CI/CD automation.
 
 ## Mission Statement
