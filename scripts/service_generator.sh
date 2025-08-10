@@ -38,8 +38,7 @@ services:
 EOF
 
     # Extract services from YAML and generate compose entries
-    yq '.services | keys[]' "$SERVICES_CONFIG" | while read -r service_key; do
-        service_key=$(echo "$service_key" | tr -d '"')
+    yaml_parser get-services "$SERVICES_CONFIG" | while read -r service_key; do
         echo "  Processing service: $service_key"
 
         # Add service name and configuration
@@ -110,8 +109,7 @@ generate_nginx_from_services() {
     mkdir -p "$GENERATED_NGINX_DIR"
 
     # Extract services and generate nginx templates
-    yq '.services | keys[]' "$SERVICES_CONFIG" | while read -r service_key; do
-        service_key=$(echo "$service_key" | tr -d '"')
+    yaml_parser get-services "$SERVICES_CONFIG" | while read -r service_key; do
         echo "  Processing nginx config for: $service_key"
 
         # Check if service uses external template file
