@@ -64,7 +64,7 @@ jobs:
 
       - name: 📚 Build documentation
         run: |
-          cd docs && poetry run mkdocs build --clean --strict
+          poetry run mkdocs build --clean --strict
         env:
           # Disable social plugin for faster builds in CI
           MKDOCS_ENABLE_SOCIAL: false
@@ -72,7 +72,7 @@ jobs:
       - name: 📤 Upload documentation artifacts
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./docs/site
+          path: ./site
 
   deploy:
     name: 🚀 Deploy to GitHub Pages
@@ -126,7 +126,7 @@ jobs:
 
       - name: 🔍 Validate documentation build
         run: |
-          cd docs && poetry run mkdocs build --clean --strict
+          poetry run mkdocs build --clean --strict
         env:
           MKDOCS_ENABLE_SOCIAL: false
 
