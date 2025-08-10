@@ -140,7 +140,7 @@ teardown() {
     [ -f "${GENERATED_SWARM_STACK}" ]
 
     # Should be valid YAML (basic syntax check using python)
-    run python3 -c "import yaml; yaml.safe_load(open('${GENERATED_SWARM_STACK}'))"
+    run poetry run python -c "import yaml; yaml.safe_load(open('${GENERATED_SWARM_STACK}'))"
     if [ "$status" -ne 0 ]; then
         echo "YAML validation failed: $output"
         cat "${GENERATED_SWARM_STACK}"
