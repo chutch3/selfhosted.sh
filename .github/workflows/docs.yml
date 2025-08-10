@@ -55,19 +55,18 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
 
+      - name: 🔧 Install Task
+        uses: arduino/setup-task@v1
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: 🔧 Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
-
-      - name: 🔧 Install project
-        run: poetry install --no-interaction
+        run: task install
 
       - name: 📚 Build documentation
-        run: |
-          poetry run mkdocs build --clean --strict
-        env:
-          # Disable social plugin for faster builds in CI
-          MKDOCS_ENABLE_SOCIAL: false
+        run: task docs:build
 
       - name: 📤 Upload documentation artifacts
         uses: actions/upload-pages-artifact@v3
@@ -117,18 +116,18 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
 
+      - name: 🔧 Install Task
+        uses: arduino/setup-task@v1
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: 🔧 Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
-
-      - name: 🔧 Install project
-        run: poetry install --no-interaction
+        run: task install
 
       - name: 🔍 Validate documentation build
-        run: |
-          poetry run mkdocs build --clean --strict
-        env:
-          MKDOCS_ENABLE_SOCIAL: false
+        run: task docs:validate-strict
 
       - name: 🔗 Check for broken links
         run: |
