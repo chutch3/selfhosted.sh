@@ -423,8 +423,8 @@ generate_swarm_stack_from_services() {
 
     echo "🐳 Generating Docker Swarm stack from services configuration..."
 
-    # Set output path (temporary location for legacy compatibility)
-    local SWARM_STACK="${PROJECT_ROOT}/generated-swarm-stack.yaml"
+    # Set output path - use environment variable for testing, default to temporary location
+    local SWARM_STACK="${GENERATED_SWARM_STACK:-${PROJECT_ROOT}/generated-swarm-stack.yaml}"
 
     # Start the swarm stack file with infrastructure services
     cat > "$SWARM_STACK" <<EOF
