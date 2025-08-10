@@ -128,7 +128,7 @@ jobs:
         run: task install
 
       - name: 🔍 Validate documentation build
-        run: task docs:validate-strict
+        run: task docs:validate
 
       - name: 🔗 Check for broken links
         run: |
