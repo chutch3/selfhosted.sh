@@ -104,12 +104,6 @@ tasks:
     desc: Run all checks (lint, test, static analysis, docs)
     deps: [lint, test, "static-analysis", "docs:validate"]
 
-  ci:
-    desc: Complete CI pipeline (matches GitHub Actions)
-    deps: [install, lint, "static-analysis", "docs:validate"]
-    cmds:
-      - echo "✅ All CI checks passed"
-
 
   release:version:
     desc: Check what the next version would be
