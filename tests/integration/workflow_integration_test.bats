@@ -41,8 +41,7 @@ teardown() {
     # Generate bundles
     export HOMELAB_CONFIG="$TEST_CONFIG"
     export OUTPUT_DIR="$TEST_OUTPUT"
-    run time_operation "Single Machine Bundle Generation" translate_homelab_to_compose
-    [ $status -eq 0 ]
+    time_operation "Single Machine Bundle Generation" translate_homelab_to_compose
     assert_within_time_limit 3
 
     # Validate generated bundles
@@ -68,8 +67,9 @@ teardown() {
     create_test_homelab_config "docker_compose" 3 5
 
     # Generate bundles
-    time_operation "Multi Machine Bundle Generation" translate_homelab_to_compose "$TEST_CONFIG"
-    [ $status -eq 0 ]
+    export HOMELAB_CONFIG="$TEST_CONFIG"
+    export OUTPUT_DIR="$TEST_OUTPUT"
+    time_operation "Multi Machine Bundle Generation" translate_homelab_to_compose
     assert_within_time_limit 5
 
     # Validate all machine bundles
@@ -92,15 +92,20 @@ teardown() {
 
 @test "Docker Compose deployment coordination (mocked)" {
     create_test_homelab_config "docker_compose" 3 5
-    translate_homelab_to_compose "$TEST_CONFIG"
+    export HOMELAB_CONFIG="$TEST_CONFIG"
+    export OUTPUT_DIR="$TEST_OUTPUT"
+    translate_homelab_to_compose
 
     # Test deployment coordination with mocked SSH
     if [ -f "$PROJECT_ROOT/scripts/deploy_compose_bundles.sh" ]; then
         # shellcheck disable=SC1091
         source "$PROJECT_ROOT/scripts/deploy_compose_bundles.sh"
 
+        # Ensure mocking is enabled (from enhanced_test_helper.bash)
+        export -f mock_ssh
+        alias ssh=mock_ssh
+
         time_operation "Deployment Coordination" deploy_to_all_machines "$TEST_CONFIG"
-        [ $status -eq 0 ]
         assert_within_time_limit 10
 
         # Verify coordination messages
@@ -120,27 +125,38 @@ teardown() {
     # Create Swarm configuration
     create_test_homelab_config "docker_swarm" 3 5
 
-    # Generate Swarm stack
-    time_operation "Swarm Stack Generation" translate_to_docker_swarm "$TEST_CONFIG"
-    [ $status -eq 0 ]
-    assert_within_time_limit 3
+    # Source Swarm script separately (avoiding function conflicts)
+    if [ -f "$PROJECT_ROOT/scripts/translate_homelab_to_swarm.sh" ]; then
+        # shellcheck disable=SC1091
+        source "$PROJECT_ROOT/scripts/translate_homelab_to_swarm.sh"
+        
+        # Generate Swarm stack
+        time_operation "Swarm Stack Generation" translate_to_docker_swarm "$TEST_CONFIG"
+        assert_within_time_limit 3
 
-    # Save stack output
-    translate_to_docker_swarm "$TEST_CONFIG" > "$TEST_OUTPUT/docker-stack.yaml"
+        # Save stack output
+        translate_to_docker_swarm "$TEST_CONFIG" > "$TEST_OUTPUT/docker-stack.yaml"
 
-    # Validate generated stack
-    assert_swarm_stack_valid "$TEST_OUTPUT/docker-stack.yaml"
+        # Validate generated stack
+        assert_swarm_stack_valid "$TEST_OUTPUT/docker-stack.yaml"
 
-    # Verify Swarm-specific features
+        # Verify Swarm-specific features
     yq '.networks.overlay_network.driver' "$TEST_OUTPUT/docker-stack.yaml" | grep -q "overlay"
 
-    # Check for placement constraints
-    local constraints
-    constraints=$(yq '.services[].deploy.placement.constraints[]?' "$TEST_OUTPUT/docker-stack.yaml" 2>/dev/null)
-    echo "$constraints" | grep -q "node.hostname" || echo "No placement constraints found (may be expected)"
+        # Check for placement constraints
+        local constraints
+        constraints=$(yq '.services[].deploy.placement.constraints[]?' "$TEST_OUTPUT/docker-stack.yaml" 2>/dev/null)
+        echo "$constraints" | grep -q "node.hostname" || echo "No placement constraints found (may be expected)"
+    else
+        skip "Swarm translation script not available"
+    fi
 }
 
 @test "Docker Swarm deployment strategies translation" {
+    # Source Swarm script separately
+    if [ -f "$PROJECT_ROOT/scripts/translate_homelab_to_swarm.sh" ]; then
+        # shellcheck disable=SC1091
+        source "$PROJECT_ROOT/scripts/translate_homelab_to_swarm.sh"
     cat > "$TEST_CONFIG" << 'EOF'
 version: "2.0"
 deployment: docker_swarm
@@ -169,23 +185,30 @@ services:
     deploy: random
 EOF
 
-    # Generate stack
-    translate_to_docker_swarm "$TEST_CONFIG" > "$TEST_OUTPUT/docker-stack.yaml"
-    assert_swarm_stack_valid "$TEST_OUTPUT/docker-stack.yaml"
+        # Generate stack
+        translate_to_docker_swarm "$TEST_CONFIG" > "$TEST_OUTPUT/docker-stack.yaml"
+        assert_swarm_stack_valid "$TEST_OUTPUT/docker-stack.yaml"
 
-    # Verify deployment strategies are translated
-    local stack_content
-    stack_content=$(cat "$TEST_OUTPUT/docker-stack.yaml")
+        # Verify deployment strategies are translated
+        local stack_content
+        stack_content=$(cat "$TEST_OUTPUT/docker-stack.yaml")
 
-    # Check for placement constraints
-    echo "$stack_content" | grep -q "node.hostname == driver" || echo "Driver constraint not found"
-    echo "$stack_content" | grep -q "node.hostname == node-01" || echo "Node-01 constraint not found"
+        # Check for placement constraints
+        echo "$stack_content" | grep -q "node.hostname == driver" || echo "Driver constraint not found"
+        echo "$stack_content" | grep -q "node.hostname == node-01" || echo "Node-01 constraint not found"
 
-    # Check for global mode (deploy: all)
-    echo "$stack_content" | grep -q "mode: global" || echo "Global mode not found"
+        # Check for global mode (deploy: all)
+        echo "$stack_content" | grep -q "mode: global" || echo "Global mode not found"
+    else
+        skip "Swarm translation script not available"
+    fi
 }
 
 @test "Docker Swarm orchestration features" {
+    # Source Swarm script separately
+    if [ -f "$PROJECT_ROOT/scripts/translate_homelab_to_swarm.sh" ]; then
+        # shellcheck disable=SC1091
+        source "$PROJECT_ROOT/scripts/translate_homelab_to_swarm.sh"
     cat > "$TEST_CONFIG" << 'EOF'
 version: "2.0"
 deployment: docker_swarm
@@ -207,17 +230,20 @@ secrets:
     external: false
 EOF
 
-    translate_to_docker_swarm "$TEST_CONFIG" > "$TEST_OUTPUT/docker-stack.yaml"
-    assert_swarm_stack_valid "$TEST_OUTPUT/docker-stack.yaml"
+        translate_to_docker_swarm "$TEST_CONFIG" > "$TEST_OUTPUT/docker-stack.yaml"
+        assert_swarm_stack_valid "$TEST_OUTPUT/docker-stack.yaml"
 
-    # Verify orchestration features
-    local stack_content
-    stack_content=$(cat "$TEST_OUTPUT/docker-stack.yaml")
+        # Verify orchestration features
+        local stack_content
+        stack_content=$(cat "$TEST_OUTPUT/docker-stack.yaml")
 
-    echo "$stack_content" | grep -q "replicas: 3"
-    echo "$stack_content" | grep -q "healthcheck:"
-    echo "$stack_content" | grep -q "secrets:"
-    echo "$stack_content" | grep -q "api_key:"
+        echo "$stack_content" | grep -q "replicas: 3"
+        echo "$stack_content" | grep -q "healthcheck:"
+        echo "$stack_content" | grep -q "secrets:"
+        echo "$stack_content" | grep -q "api_key:"
+    else
+        skip "Swarm translation script not available"
+    fi
 }
 
 # =============================================================================
@@ -232,20 +258,21 @@ EOF
     if [ -f "$PROJECT_ROOT/scripts/migrate_to_homelab_yaml.sh" ]; then
         cd "$TEST_DIR"
 
-        time_operation "Configuration Migration" "$PROJECT_ROOT/scripts/migrate_to_homelab_yaml.sh"
-        [ $status -eq 0 ]
+        time_operation "Configuration Migration" "$PROJECT_ROOT/scripts/migrate_to_homelab_yaml.sh" -o "$TEST_DIR/test-homelab.yaml"
         assert_within_time_limit 30
 
         # Validate migrated configuration
-        [ -f "$TEST_DIR/homelab.yaml" ]
-        assert_homelab_config_valid "$TEST_DIR/homelab.yaml"
+        [ -f "$TEST_DIR/test-homelab.yaml" ]
+        assert_homelab_config_valid "$TEST_DIR/test-homelab.yaml"
 
         # Verify migration preserved key information
-        yq '.services.homepage' "$TEST_DIR/homelab.yaml" | grep -q "homepage"
-        yq '.services.jellyfin' "$TEST_DIR/homelab.yaml" | grep -q "jellyfin"
+        yq '.services.homepage' "$TEST_DIR/test-homelab.yaml" | grep -q "homepage"
+        yq '.services.jellyfin' "$TEST_DIR/test-homelab.yaml" | grep -q "jellyfin"
 
         # Test that migrated config can generate bundles
-        translate_homelab_to_compose "$TEST_DIR/homelab.yaml" "$TEST_OUTPUT"
+        export HOMELAB_CONFIG="$TEST_DIR/test-homelab.yaml"
+        export OUTPUT_DIR="$TEST_OUTPUT"
+        translate_homelab_to_compose
         [ -f "$TEST_OUTPUT/driver/docker-compose.yaml" ]
     else
         skip "Migration script not available"
@@ -257,10 +284,12 @@ EOF
 
     if [ -f "$PROJECT_ROOT/scripts/migrate_to_homelab_yaml.sh" ]; then
         cd "$TEST_DIR"
-        "$PROJECT_ROOT/scripts/migrate_to_homelab_yaml.sh"
+        "$PROJECT_ROOT/scripts/migrate_to_homelab_yaml.sh" -o "$TEST_DIR/test-homelab.yaml"
 
         # Generate bundles from migrated config
-        translate_homelab_to_compose "$TEST_DIR/homelab.yaml" "$TEST_OUTPUT/migrated"
+        export HOMELAB_CONFIG="$TEST_DIR/test-homelab.yaml"
+        export OUTPUT_DIR="$TEST_OUTPUT/migrated"
+        translate_homelab_to_compose
 
         # Validate functionality preservation
         local migrated_services
@@ -278,10 +307,6 @@ EOF
 # =============================================================================
 
 @test "same configuration works for both deployment types" {
-    # Skip this test to avoid function name conflicts between Compose and Swarm scripts
-    # Cross-deployment testing should be done in separate test files for each deployment type
-    skip "Cross-deployment testing moved to separate test suites to avoid function conflicts"
-    
     # Create base configuration
     cat > "$TEST_CONFIG" << 'EOF'
 version: "2.0"
@@ -302,7 +327,9 @@ services:
 EOF
 
     # Test Docker Compose generation
-    translate_homelab_to_compose "$TEST_CONFIG"
+    export HOMELAB_CONFIG="$TEST_CONFIG"
+    export OUTPUT_DIR="$TEST_OUTPUT"
+    translate_homelab_to_compose
     assert_docker_compose_valid "$TEST_OUTPUT/driver/docker-compose.yaml"
 
     # Convert to Swarm and test (using actual swarm script)
@@ -312,9 +339,7 @@ EOF
     if [ -f "$PROJECT_ROOT/scripts/translate_homelab_to_swarm.sh" ]; then
         # shellcheck disable=SC1091
         source "$PROJECT_ROOT/scripts/translate_homelab_to_swarm.sh"
-        export HOMELAB_CONFIG="$TEST_CONFIG"
-        export OUTPUT_DIR="$TEST_OUTPUT"
-        translate_homelab_to_swarm > "$TEST_OUTPUT/docker-stack.yaml"
+        translate_to_docker_swarm "$TEST_CONFIG" > "$TEST_OUTPUT/docker-stack.yaml"
         assert_swarm_stack_valid "$TEST_OUTPUT/docker-stack.yaml"
     else
         skip "Swarm translation script not available"
@@ -386,24 +411,27 @@ EOF
 @test "workflow performance - small configuration" {
     create_test_homelab_config "docker_compose" 1 3
 
-    run time_operation "Small Config Workflow" translate_homelab_to_compose
-    [ $status -eq 0 ]
+    export HOMELAB_CONFIG="$TEST_CONFIG"
+    export OUTPUT_DIR="$TEST_OUTPUT"
+    time_operation "Small Config Workflow" translate_homelab_to_compose
     assert_within_time_limit 2
 }
 
 @test "workflow performance - medium configuration" {
     create_test_homelab_config "docker_compose" 3 10
 
-    run time_operation "Medium Config Workflow" translate_homelab_to_compose
-    [ $status -eq 0 ]
+    export HOMELAB_CONFIG="$TEST_CONFIG"
+    export OUTPUT_DIR="$TEST_OUTPUT"
+    time_operation "Medium Config Workflow" translate_homelab_to_compose
     assert_within_time_limit 5
 }
 
 @test "workflow performance - large configuration" {
     create_test_homelab_config "docker_compose" 5 20
 
-    run time_operation "Large Config Workflow" translate_homelab_to_compose
-    [ $status -eq 0 ]
+    export HOMELAB_CONFIG="$TEST_CONFIG"
+    export OUTPUT_DIR="$TEST_OUTPUT"
+    time_operation "Large Config Workflow" translate_homelab_to_compose
     assert_within_time_limit 10
 }
 
