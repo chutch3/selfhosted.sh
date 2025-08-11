@@ -80,19 +80,21 @@ services:
     deploy: "node-01"
     enabled: true
 
-  # Database service (should NOT get nginx config)
+    # Database service (should NOT get nginx config - explicitly disabled)
   postgres:
     image: "postgres:15"
     port: 5432
     deploy: "node-02"
     enabled: true
+    web: false
 
-  # Non-web service (should NOT get nginx config)
+  # Non-web service (should NOT get nginx config - explicitly disabled)
   redis:
     image: "redis:alpine"
     port: 6379
     deploy: "node-02"
     enabled: true
+    web: false
 EOF
 }
 
@@ -198,7 +200,7 @@ EOF
 @test "should detect web services vs non-web services correctly" {
     create_test_config
 
-    # Test web service detection
+    # Test web service detection (services with ports that should be exposed)
     run is_web_service "homepage" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
@@ -208,11 +210,63 @@ EOF
     run is_web_service "static-site" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
-    # Test non-web service detection
+    # Test non-web service detection (services with web: false)
     run is_web_service "postgres" "$TEST_CONFIG"
     [ "$status" -eq 1 ]
 
     run is_web_service "redis" "$TEST_CONFIG"
+    [ "$status" -eq 1 ]
+}
+
+@test "should respect explicit domain configuration for web service detection" {
+    # Create config with explicit domain
+    cat > "$TEST_CONFIG" <<EOF
+version: "2.0"
+deployment: docker_compose
+
+machines:
+  driver:
+    host: "192.168.1.10"
+    user: "admin"
+
+environment:
+  BASE_DOMAIN: "homelab.local"
+
+services:
+  # Service with explicit domain should be exposed
+  api:
+    image: "api:latest"
+    port: 8080
+    domain: "api.custom.com"
+    deploy: "driver"
+    enabled: true
+
+  # Service without port but with domain should be exposed
+  frontend:
+    image: "frontend:latest"
+    domain: "app.homelab.local"
+    deploy: "driver"
+    enabled: true
+
+  # Service with port but web: false should NOT be exposed
+  database:
+    image: "postgres:15"
+    port: 5432
+    web: false
+    deploy: "driver"
+    enabled: true
+EOF
+
+    # Service with explicit domain should be web service
+    run is_web_service "api" "$TEST_CONFIG"
+    [ "$status" -eq 0 ]
+
+    # Service with domain but no port should be web service (but won't get nginx config)
+    run is_web_service "frontend" "$TEST_CONFIG"
+    [ "$status" -eq 0 ]
+
+    # Service with web: false should NOT be web service
+    run is_web_service "database" "$TEST_CONFIG"
     [ "$status" -eq 1 ]
 }
 
