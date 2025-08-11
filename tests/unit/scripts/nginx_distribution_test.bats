@@ -100,7 +100,7 @@ EOF
     create_test_config
 
     # Generate nginx config for driver (homepage)
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Should create nginx config for homepage on port 3000
@@ -114,7 +114,7 @@ EOF
 @test "should generate nginx config for services on ports 80 and 443" {
     create_test_config
 
-    run generate_nginx_configuration_for_machine "node-01" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "node-01" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Should create nginx configs for both port 80 and 443 services
@@ -131,7 +131,7 @@ EOF
 @test "should NOT generate nginx config for database services" {
     create_test_config
 
-    run generate_nginx_configuration_for_machine "node-02" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "node-02" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Should NOT create nginx configs for database/non-web services
@@ -146,7 +146,7 @@ EOF
     create_test_config
 
     # Generate for driver - should only have homepage
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     [ -f "$TEST_OUTPUT/driver/nginx/conf.d/homepage.conf" ]
@@ -158,7 +158,7 @@ EOF
 @test "should use correct domain format in nginx configs" {
     create_test_config
 
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Check domain format is service.BASE_DOMAIN
@@ -169,7 +169,7 @@ EOF
 @test "should generate main nginx.conf with correct structure" {
     create_test_config
 
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     [ -f "$TEST_OUTPUT/driver/nginx/nginx.conf" ]
@@ -239,7 +239,7 @@ services:
     domain: "custom.example.com"
 EOF
 
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Should use custom domain if specified
@@ -270,7 +270,7 @@ services:
     ssl: true
 EOF
 
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Should include SSL configuration
@@ -283,7 +283,7 @@ EOF
 
     # Generate for all machines
     for machine in driver node-01 node-02; do
-        run generate_nginx_configuration_for_machine "$machine" "$TEST_CONFIG"
+        run generate_nginx_config_for_machine "$machine" "$TEST_CONFIG"
         [ "$status" -eq 0 ]
     done
 
@@ -306,7 +306,7 @@ EOF
 @test "should validate nginx configuration syntax" {
     create_test_config
 
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Test nginx config syntax (if nginx is available)
@@ -319,7 +319,7 @@ EOF
 @test "should support health check endpoints" {
     create_test_config
 
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Should include health check location in nginx configs
@@ -343,10 +343,10 @@ EOF
     create_test_config
 
     # Generate configs for different machines
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
-    run generate_nginx_configuration_for_machine "node-01" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "node-01" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Each machine should have different service configs
@@ -378,7 +378,7 @@ EOF
 
     export NGINX_TEMPLATES_DIR="$TEST_DIR/nginx-templates"
 
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Should use custom template if available
@@ -389,7 +389,7 @@ EOF
     # Create invalid config
     echo "invalid yaml content" > "$TEST_CONFIG"
 
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 1 ]
     [[ "$output" =~ Invalid|invalid|Failed|failed|error ]]
 }
@@ -417,7 +417,7 @@ services:
     replicas: 3
 EOF
 
-    run generate_nginx_configuration_for_machine "driver" "$TEST_CONFIG"
+    run generate_nginx_config_for_machine "driver" "$TEST_CONFIG"
     [ "$status" -eq 0 ]
 
     # Should generate upstream configuration for multiple replicas

@@ -315,27 +315,47 @@ http {
     keepalive_timeout 65;
     types_hash_max_size 2048;
 
+    # Health check endpoint
+    server {
+        listen 80 default_server;
+        server_name _;
+
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+    }
+
     # Include service configurations
     include /etc/nginx/conf.d/*.conf;
 }
 EOF
 
+    # Get base domain for service URLs
+    local base_domain
+    base_domain=$(get_base_domain "$HOMELAB_CONFIG")
+
     # Generate configuration for each service that needs reverse proxy
     while IFS= read -r service; do
         [[ -z "$service" ]] && continue
 
-        local port
-        port=$(yq ".services[\"$service\"].port" "$HOMELAB_CONFIG" 2>/dev/null)
+        # Check if this is a web service that needs nginx proxy
+        if is_web_service "$service" "$HOMELAB_CONFIG"; then
+            local port
+            port=$(yq ".services[\"$service\"].port" "$HOMELAB_CONFIG" 2>/dev/null | tr -d '"')
 
-        # Only create proxy config for services on ports 80/443 (web services)
-        if [[ "$port" == "80" || "$port" == "443" ]]; then
-            log_info "  Creating nginx config for: $service"
+            # Get custom domain or use default pattern
+            local service_domain
+            service_domain=$(yq ".services[\"$service\"].domain // \"${service}.${base_domain}\"" "$HOMELAB_CONFIG" 2>/dev/null | tr -d '"')
+
+            log_info "  Creating nginx config for: $service (${service_domain})"
 
             cat > "$nginx_dir/conf.d/${service}.conf" <<EOF
 # Service: $service
 server {
     listen 80;
-    server_name ${service}.local;
+    server_name ${service_domain};
 
     location / {
         proxy_pass http://$service:$port;
@@ -580,6 +600,75 @@ main() {
 
     # Run translation
     translate_homelab_to_compose
+}
+
+# Function: is_web_service
+# Description: Determines if a service is a web service that needs nginx proxy
+# Arguments: $1 - service name, $2 - config file path
+# Returns: 0 if web service, 1 if not
+is_web_service() {
+    local service="$1"
+    local config_file="${2:-$HOMELAB_CONFIG}"
+
+    local port
+    port=$(yq ".services[\"$service\"].port" "$config_file" 2>/dev/null | tr -d '"')
+
+    # Consider it a web service if it has a port and it's not a typical database/cache port
+    if [[ -n "$port" && "$port" != "null" ]]; then
+        # Common non-web ports (databases, caches, etc.)
+        case "$port" in
+            5432|3306|27017|6379|9200|5672|1433|1521|5984|8086|9042|7000|7001)
+                return 1  # Not a web service
+                ;;
+            *)
+                return 0  # Likely a web service
+                ;;
+        esac
+    fi
+
+    return 1  # No port or null port
+}
+
+# Function: get_base_domain
+# Description: Gets the base domain from environment or config
+# Arguments: $1 - config file path
+# Returns: Base domain string
+get_base_domain() {
+    local config_file="${1:-$HOMELAB_CONFIG}"
+
+    # Try environment first, then config, then default
+    local base_domain="${BASE_DOMAIN:-}"
+
+    if [[ -z "$base_domain" ]]; then
+        base_domain=$(yq ".environment.BASE_DOMAIN // \"homelab.local\"" "$config_file" 2>/dev/null | tr -d '"')
+    fi
+
+    echo "$base_domain"
+}
+
+# Function: generate_nginx_bundles
+# Description: Generates nginx bundles for all machines
+# Arguments: $1 - config file path
+# Returns: 0 on success, 1 on failure
+generate_nginx_bundles() {
+    local config_file="${1:-$HOMELAB_CONFIG}"
+
+    log_info "Generating nginx bundles for all machines..."
+
+    # Get all machines
+    local machines
+    machines=$(get_machine_list "$config_file") || return 1
+
+    # Generate nginx config for each machine
+    while IFS= read -r machine; do
+        [[ -z "$machine" ]] && continue
+
+        log_info "Generating nginx bundle for: $machine"
+        generate_nginx_config_for_machine "$machine" "$config_file" || return 1
+    done <<< "$machines"
+
+    log_success "Generated nginx bundles for all machines"
+    return 0
 }
 
 # Only run main if script is executed directly (not sourced)
