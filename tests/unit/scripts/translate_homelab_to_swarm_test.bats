@@ -356,6 +356,7 @@ EOF
     [ "$status" -eq 0 ]
 
     # Save output to file for validation
+    mkdir -p "$TEST_OUTPUT"
     echo "$output" > "$TEST_OUTPUT/docker-stack.yaml"
 
     # Test YAML syntax
@@ -461,6 +462,7 @@ EOF
     create_test_config
 
     # Generate stack
+    mkdir -p "$TEST_OUTPUT"
     translate_to_docker_swarm "$TEST_CONFIG" > "$TEST_OUTPUT/docker-stack.yaml"
 
     # Validate stack deployability
