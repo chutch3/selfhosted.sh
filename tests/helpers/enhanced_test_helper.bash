@@ -19,7 +19,7 @@ fi
 if ! command -v fail >/dev/null 2>&1; then
     fail() {
         echo "FAIL: $1" >&2
-        return 1
+        exit 1
     }
 fi
 
@@ -309,16 +309,40 @@ assert_homelab_config_valid() {
 
     [ -f "$config_file" ] || fail "Homelab config file not found: $config_file"
 
-    # Use existing validation if available
-    if [ -f "$PROJECT_ROOT/scripts/simple_homelab_validator.sh" ]; then
-        "$PROJECT_ROOT/scripts/simple_homelab_validator.sh" "$config_file" >/dev/null 2>&1 || fail "Homelab config validation failed: $config_file"
-    else
-        # Basic validation
-        yq '.' "$config_file" >/dev/null 2>&1 || fail "Invalid YAML syntax in $config_file"
-        yq '.version' "$config_file" >/dev/null 2>&1 || fail "Missing version in $config_file"
-        yq '.deployment' "$config_file" >/dev/null 2>&1 || fail "Missing deployment in $config_file"
-        yq '.services' "$config_file" >/dev/null 2>&1 || fail "Missing services in $config_file"
+    # Use basic validation for reliability (avoid validator timeout issues)
+    yq '.' "$config_file" >/dev/null 2>&1 || fail "Invalid YAML syntax in $config_file"
+    yq '.version' "$config_file" >/dev/null 2>&1 || fail "Missing version in $config_file"
+    yq '.deployment' "$config_file" >/dev/null 2>&1 || fail "Missing deployment in $config_file"
+    yq '.services' "$config_file" >/dev/null 2>&1 || fail "Missing services in $config_file"
+
+    # Validate version value
+    local version
+    version=$(yq '.version' "$config_file" | tr -d '"')
+    if [ "$version" = "null" ] || [ -z "$version" ]; then
+        fail "Missing version field in $config_file"
+    elif [ "$version" != "2.0" ]; then
+        fail "Invalid version in $config_file: $version (expected 2.0)"
     fi
+
+    # Validate deployment value
+    local deployment
+    deployment=$(yq '.deployment' "$config_file" | tr -d '"')
+    if [ "$deployment" = "null" ] || [ -z "$deployment" ]; then
+        fail "Missing deployment field in $config_file"
+    elif [[ ! "$deployment" =~ ^(docker_compose|docker_swarm|kubernetes)$ ]]; then
+        fail "Invalid deployment type in $config_file: $deployment"
+    fi
+
+    # Validate services is not empty
+    local services_field
+    services_field=$(yq '.services' "$config_file")
+    if [ "$services_field" = "null" ] || [ -z "$services_field" ]; then
+        fail "Missing services field in $config_file"
+    fi
+
+    local service_count
+    service_count=$(yq '.services | length' "$config_file")
+    [ "$service_count" -gt 0 ] || fail "No services defined in $config_file"
 
     echo "✅ Homelab config valid: $config_file" >&2
 }
