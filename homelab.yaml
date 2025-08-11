@@ -26,63 +26,89 @@ environment:
   QBIT_USERNAME: admin
   QBIT_PASSWORD: your_qbit_password
   PROWLARR_API_KEY: your_prowlarr_api_key
+
 machines:
-[INFO] Processing machines configuration from /home/cody/workspace/homelab/machines.yml
+  driver:
+    host: localhost
+    user: user
+    labels:
+      role: manager
+
 services:
-[INFO] Processing services configuration from /home/cody/workspace/homelab/config/services.yaml
-[INFO] Processing service: actual
-[INFO] Processing service: cryptpad
-[INFO] Processing service: homeassistant
-[INFO] Processing service: homepage
-[INFO] Processing service: photoprism
-[INFO] Processing service: portainer_agent
   actual:
     image: docker.io/actualbudget/actual-server:latest
     port: 5006
     storage: true
-    environment:
+    enabled: true
+    deploy: driver
+    domain: actual.diyhub.dev
     overrides:
       docker_compose:
         volumes:
+          - "${VOLUME_ACTUAL_DATA}:/data"
 
   cryptpad:
     image: promasu/cryptpad:version-2024.6.0
     port: 3000
-    environment:
+    enabled: true
+    deploy: driver
+    domain: cryptpad.diyhub.dev
     overrides:
       docker_compose:
         volumes:
+          - "${VOLUME_CRYPTPAD_FILES}:/cryptpad/datastore"
+          - "${VOLUME_CRYPTPAD_CUSTOMIZATION}:/cryptpad/customize"
 
   homeassistant:
     image: ghcr.io/home-assistant/home-assistant:stable
     port: 8123
-    environment:
+    enabled: true
+    deploy: driver
+    domain: homeassistant.diyhub.dev
     overrides:
       docker_compose:
         volumes:
+          - "${VOLUME_HOMEASSISTANT_CONFIG}:/config"
+          - "/etc/localtime:/etc/localtime:ro"
         privileged: true
+        network_mode: host
 
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
     port: 3000
+    enabled: true
+    deploy: driver
+    domain: homepage.diyhub.dev
     overrides:
       docker_compose:
         volumes:
+          - "${VOLUME_HOMEPAGE_CONFIG}:/app/config"
+          - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
   photoprism:
     image: photoprism/photoprism:latest
     port: 2342
     storage: true
-    environment:
+    enabled: true
+    deploy: driver
+    domain: photoprism.diyhub.dev
     overrides:
       docker_compose:
         volumes:
+          - "${VOLUME_PHOTOPRISM_CONFIG}:/photoprism/storage"
+          - "${VOLUME_PHOTOPRISM_PHOTOS}:/photoprism/originals"
         security_opt:
-        working_dir: ""/photoprism""
+          - seccomp:unconfined
+          - apparmor:unconfined
+        working_dir: "/photoprism"
 
   portainer_agent:
     image: portainer/agent:2.19.4
     port: 9001
+    enabled: true
+    deploy: driver
     overrides:
       docker_compose:
         volumes:
+          - "/var/run/docker.sock:/var/run/docker.sock"
+          - "/var/lib/docker/volumes:/var/lib/docker/volumes"
