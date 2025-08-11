@@ -297,8 +297,8 @@ events {
 }
 
 http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
+    include       mime.types;
+    default_type  application/octet-stream;
 
     # Logging
     log_format main '\$remote_addr - \$remote_user [\$time_local] "\$request" '
@@ -328,7 +328,7 @@ http {
     }
 
     # Include service configurations
-    include /etc/nginx/conf.d/*.conf;
+    include conf.d/*.conf;
 }
 EOF
 
