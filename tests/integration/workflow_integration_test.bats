@@ -375,7 +375,18 @@ EOF
     assert_docker_compose_valid "$TEST_OUTPUT/driver/docker-compose.yaml"
 
     # Convert to Swarm and test (using actual swarm script)
-    yq -i -y '.deployment = "docker_swarm"' "$TEST_CONFIG"
+    # Create temporary file with swarm deployment type
+    local temp_config
+    temp_config=$(mktemp)
+    # Try both yq versions: new version (mikefarah) and old version (kislyuk)
+    if yq e '.deployment = "docker_swarm"' "$TEST_CONFIG" > "$temp_config" 2>/dev/null; then
+        mv "$temp_config" "$TEST_CONFIG"
+    elif yq -y '.deployment = "docker_swarm"' "$TEST_CONFIG" > "$temp_config" 2>/dev/null; then
+        mv "$temp_config" "$TEST_CONFIG"
+    else
+        sed 's/deployment: docker_compose/deployment: docker_swarm/' "$TEST_CONFIG" > "$temp_config"
+        mv "$temp_config" "$TEST_CONFIG"
+    fi
 
     # Source swarm script and translate
     # shellcheck disable=SC2031
