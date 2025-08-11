@@ -168,27 +168,35 @@ extract_machines() {
     local output=""
 
     if [[ -f "$MACHINES_YML" ]]; then
-        log_info "Processing machines configuration from $MACHINES_YML"
+        log_info "Processing machines configuration from $MACHINES_YML" >&2
 
-        # Process managers
-        local managers
-        managers=$(yq '.managers // []' "$MACHINES_YML" 2>/dev/null || echo "[]")
-        if [[ "$managers" != "[]" && "$managers" != "null" ]]; then
-            while read -r machine; do
-                if [[ -n "$machine" && "$machine" != "null" ]]; then
-                    local hostname ip user role labels
-                    hostname=$(echo "$machine" | yq '.hostname' | tr -d '"')
-                    ip=$(echo "$machine" | yq '.ip' | tr -d '"')
-                    user=$(echo "$machine" | yq '.user' | tr -d '"')
-                    role=$(echo "$machine" | yq '.role // "manager"' | tr -d '"')
-                    labels=$(echo "$machine" | yq '.labels // {}' 2>/dev/null)
+        # Check different legacy formats
+        local machines_data
+        machines_data=$(yq '.machines // {}' "$MACHINES_YML" 2>/dev/null)
+
+        if [[ "$machines_data" != "{}" && "$machines_data" != "null" ]]; then
+            # Check if machines is an array or object
+            local machines_type
+            machines_type=$(yq '.machines | type' "$MACHINES_YML" 2>/dev/null)
+
+            if [[ "$machines_type" == "array" ]]; then
+                # Array format: process .machines[i]
+                local machine_count
+                machine_count=$(yq '.machines | length' "$MACHINES_YML" 2>/dev/null)
+
+                for ((i=0; i<machine_count; i++)); do
+                    local host user role labels machine_name
+                    host=$(yq ".machines[$i].host" "$MACHINES_YML" | tr -d '"')
+                    # Try both 'user' and 'ssh_user' fields
+                    user=$(yq ".machines[$i].user // .machines[$i].ssh_user" "$MACHINES_YML" | tr -d '"')
+                    role=$(yq ".machines[$i].role // \"worker\"" "$MACHINES_YML" | tr -d '"')
+                    labels=$(yq ".machines[$i].labels // {}" "$MACHINES_YML" 2>/dev/null)
 
                     # Generate machine name from hostname
-                    local machine_name
-                    machine_name=$(echo "$hostname" | sed 's/\..*$//' | tr '[:upper:]' '[:lower:]')
+                    machine_name=$(echo "$host" | sed 's/\..*$//' | tr '[:upper:]' '[:lower:]')
 
                     output="${output}  ${machine_name}:\n"
-                    output="${output}    host: ${ip}\n"
+                    output="${output}    host: ${host}\n"
                     output="${output}    user: ${user}\n"
                     if [[ "$DEPLOYMENT_TYPE" == "docker_swarm" ]]; then
                         output="${output}    role: ${role}\n"
@@ -205,47 +213,120 @@ extract_machines() {
                         done
                     fi
                     output="${output}\n"
-                fi
-            done <<< "$(echo "$managers" | yq '.[]')"
-        fi
+                done
+            else
+                # Object format: process .machines.machine_name
+                local machine_names
+                machine_names=$(yq '.machines | keys | .[]' "$MACHINES_YML" | tr -d '"')
 
-        # Process workers
-        local workers
-        workers=$(yq '.workers // []' "$MACHINES_YML" 2>/dev/null || echo "[]")
-        if [[ "$workers" != "[]" && "$workers" != "null" ]]; then
-            while read -r machine; do
-                if [[ -n "$machine" && "$machine" != "null" ]]; then
-                    local hostname ip user role labels
-                    hostname=$(echo "$machine" | yq '.hostname' | tr -d '"')
-                    ip=$(echo "$machine" | yq '.ip' | tr -d '"')
-                    user=$(echo "$machine" | yq '.user' | tr -d '"')
-                    role=$(echo "$machine" | yq '.role // "worker"' | tr -d '"')
-                    labels=$(echo "$machine" | yq '.labels // {}' 2>/dev/null)
+                while read -r machine_name; do
+                    if [[ -n "$machine_name" ]]; then
+                        local host user role labels
+                        host=$(yq ".machines.\"$machine_name\".host" "$MACHINES_YML" | tr -d '"')
+                        user=$(yq ".machines.\"$machine_name\".user" "$MACHINES_YML" | tr -d '"')
+                        role=$(yq ".machines.\"$machine_name\".role // \"worker\"" "$MACHINES_YML" | tr -d '"')
+                        labels=$(yq ".machines.\"$machine_name\".labels // {}" "$MACHINES_YML" 2>/dev/null)
 
-                    # Generate machine name from hostname
-                    local machine_name
-                    machine_name=$(echo "$hostname" | sed 's/\..*$//' | tr '[:upper:]' '[:lower:]')
+                        output="${output}  ${machine_name}:\n"
+                        output="${output}    host: ${host}\n"
+                        output="${output}    user: ${user}\n"
+                        if [[ "$DEPLOYMENT_TYPE" == "docker_swarm" ]]; then
+                            output="${output}    role: ${role}\n"
+                        fi
 
-                    output="${output}  ${machine_name}:\n"
-                    output="${output}    host: ${ip}\n"
-                    output="${output}    user: ${user}\n"
-                    if [[ "$DEPLOYMENT_TYPE" == "docker_swarm" ]]; then
-                        output="${output}    role: ${role}\n"
+                        # Add labels if present
+                        if [[ "$labels" != "{}" && "$labels" != "null" ]]; then
+                            output="${output}    labels:\n"
+                            echo "$labels" | yq 'to_entries | .[]' | while read -r label_entry; do
+                                local key value
+                                key=$(echo "$label_entry" | yq '.key' | tr -d '"')
+                                value=$(echo "$label_entry" | yq '.value' | tr -d '"')
+                                output="${output}      - \"${key}=${value}\"\n"
+                            done
+                        fi
+                        output="${output}\n"
                     fi
+                done <<< "$machine_names"
+            fi
+        else
+            # New format: process .managers and .workers arrays
+            local managers workers
+            managers=$(yq '.managers // []' "$MACHINES_YML" 2>/dev/null || echo "[]")
+            workers=$(yq '.workers // []' "$MACHINES_YML" 2>/dev/null || echo "[]")
 
-                    # Add labels if present
-                    if [[ "$labels" != "{}" && "$labels" != "null" ]]; then
-                        output="${output}    labels:\n"
-                        echo "$labels" | yq 'to_entries | .[]' | while read -r label_entry; do
-                            local key value
-                            key=$(echo "$label_entry" | yq '.key' | tr -d '"')
-                            value=$(echo "$label_entry" | yq '.value' | tr -d '"')
-                            output="${output}      - \"${key}=${value}\"\n"
-                        done
+            # Process managers
+            if [[ "$managers" != "[]" && "$managers" != "null" ]]; then
+                while read -r machine; do
+                    if [[ -n "$machine" && "$machine" != "null" ]]; then
+                        local hostname ip user role labels
+                        hostname=$(echo "$machine" | yq '.hostname' | tr -d '"')
+                        ip=$(echo "$machine" | yq '.ip' | tr -d '"')
+                        user=$(echo "$machine" | yq '.user' | tr -d '"')
+                        role=$(echo "$machine" | yq '.role // "manager"' | tr -d '"')
+                        labels=$(echo "$machine" | yq '.labels // {}' 2>/dev/null)
+
+                        # Generate machine name from hostname
+                        local machine_name
+                        machine_name=$(echo "$hostname" | sed 's/\..*$//' | tr '[:upper:]' '[:lower:]')
+
+                        output="${output}  ${machine_name}:\n"
+                        output="${output}    host: ${ip}\n"
+                        output="${output}    user: ${user}\n"
+                        if [[ "$DEPLOYMENT_TYPE" == "docker_swarm" ]]; then
+                            output="${output}    role: ${role}\n"
+                        fi
+
+                        # Add labels if present
+                        if [[ "$labels" != "{}" && "$labels" != "null" ]]; then
+                            output="${output}    labels:\n"
+                            echo "$labels" | yq 'to_entries | .[]' | while read -r label_entry; do
+                                local key value
+                                key=$(echo "$label_entry" | yq '.key' | tr -d '"')
+                                value=$(echo "$label_entry" | yq '.value' | tr -d '"')
+                                output="${output}      - \"${key}=${value}\"\n"
+                            done
+                        fi
+                        output="${output}\n"
                     fi
-                    output="${output}\n"
-                fi
-            done <<< "$(echo "$workers" | yq '.[]')"
+                done <<< "$(echo "$managers" | yq '.[]')"
+            fi
+
+            # Process workers
+            if [[ "$workers" != "[]" && "$workers" != "null" ]]; then
+                while read -r machine; do
+                    if [[ -n "$machine" && "$machine" != "null" ]]; then
+                        local hostname ip user role labels
+                        hostname=$(echo "$machine" | yq '.hostname' | tr -d '"')
+                        ip=$(echo "$machine" | yq '.ip' | tr -d '"')
+                        user=$(echo "$machine" | yq '.user' | tr -d '"')
+                        role=$(echo "$machine" | yq '.role // "worker"' | tr -d '"')
+                        labels=$(echo "$machine" | yq '.labels // {}' 2>/dev/null)
+
+                        # Generate machine name from hostname
+                        local machine_name
+                        machine_name=$(echo "$hostname" | sed 's/\..*$//' | tr '[:upper:]' '[:lower:]')
+
+                        output="${output}  ${machine_name}:\n"
+                        output="${output}    host: ${ip}\n"
+                        output="${output}    user: ${user}\n"
+                        if [[ "$DEPLOYMENT_TYPE" == "docker_swarm" ]]; then
+                            output="${output}    role: ${role}\n"
+                        fi
+
+                        # Add labels if present
+                        if [[ "$labels" != "{}" && "$labels" != "null" ]]; then
+                            output="${output}    labels:\n"
+                            echo "$labels" | yq 'to_entries | .[]' | while read -r label_entry; do
+                                local key value
+                                key=$(echo "$label_entry" | yq '.key' | tr -d '"')
+                                value=$(echo "$label_entry" | yq '.value' | tr -d '"')
+                                output="${output}      - \"${key}=${value}\"\n"
+                            done
+                        fi
+                        output="${output}\n"
+                    fi
+                done <<< "$(echo "$workers" | yq '.[]')"
+            fi
         fi
     else
         log_warning "Machines file not found: $MACHINES_YML"
@@ -261,7 +342,7 @@ extract_environment() {
     local output=""
 
     if [[ -f "$ENV_FILE" ]]; then
-        log_info "Processing environment variables from $ENV_FILE"
+        log_info "Processing environment variables from $ENV_FILE" >&2
 
         # Extract common environment variables
         while IFS='=' read -r key value; do
@@ -285,7 +366,7 @@ extract_services() {
     local output=""
 
     if [[ -f "$SERVICES_YAML" ]]; then
-        log_info "Processing services configuration from $SERVICES_YAML"
+        log_info "Processing services configuration from $SERVICES_YAML" >&2
 
         # Get all service names
         local services
@@ -293,13 +374,13 @@ extract_services() {
 
         while read -r service; do
             if [[ -n "$service" ]]; then
-                log_info "Processing service: $service"
+                log_info "Processing service: $service" >&2
 
                 # Check if service is enabled
                 local enabled
                 enabled=$(yq ".services.$service.enabled // true" "$SERVICES_YAML")
                 if [[ "$enabled" == "false" ]]; then
-                    log_info "Skipping disabled service: $service"
+                    log_info "Skipping disabled service: $service" >&2
                     continue
                 fi
 
@@ -437,15 +518,15 @@ extract_services() {
 
                         # Add specific overrides based on what we found
                         if [[ -n "$depends_on" && "$depends_on" != "null" ]]; then
-                            output="${output}        depends_on: $(echo "$depends_on" | yq -o json -I=0)\n"
+                            output="${output}        depends_on: $(echo "$depends_on" | yq -c '.')\n"
                         fi
 
                         if [[ "$volumes" != "[]" && "$volumes" != "null" ]]; then
                             output="${output}        volumes:\n"
-                            echo "$volumes" | yq '.[]' | while read -r volume; do
+                            while IFS= read -r volume; do
                                 volume=$(echo "$volume" | tr -d '"')
                                 output="${output}          - \"${volume}\"\n"
-                            done
+                            done <<< "$(echo "$volumes" | yq '.[]')"
                         fi
 
                         if [[ "$privileged" == "true" ]]; then
@@ -453,7 +534,7 @@ extract_services() {
                         fi
 
                         if [[ -n "$security_opt" && "$security_opt" != "null" ]]; then
-                            output="${output}        security_opt: $(echo "$security_opt" | yq -o json -I=0)\n"
+                            output="${output}        security_opt: $(echo "$security_opt" | yq -c '.')\n"
                         fi
 
                         if [[ -n "$working_dir" && "$working_dir" != "null" ]]; then
@@ -477,7 +558,7 @@ extract_services() {
 generate_homelab_yaml() {
     local content=""
 
-    log_info "Generating homelab.yaml configuration"
+    log_info "Generating homelab.yaml configuration" >&2
 
     # Header
     content="# homelab.yaml - Unified Configuration\n"
