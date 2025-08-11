@@ -586,6 +586,11 @@ main() {
                 OUTPUT_DIR="$2"
                 shift 2
                 ;;
+            generate-nginx-bundles)
+                # Special command to only generate nginx bundles
+                generate_nginx_bundles "$HOMELAB_CONFIG"
+                exit $?
+                ;;
             -h|--help)
                 usage
                 exit 0
