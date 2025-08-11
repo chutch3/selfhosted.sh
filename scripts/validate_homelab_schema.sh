@@ -157,7 +157,7 @@ validate_yaml_syntax() {
 
     log_verbose "Checking YAML syntax..."
 
-    if ! yq eval '.' "$config_file" >/dev/null 2>&1; then
+    if ! yq . "$config_file" >/dev/null 2>&1; then
         log_error "Invalid YAML syntax in $config_file"
         return 1
     fi
@@ -260,9 +260,9 @@ validate_semantic_rules() {
 
     # Check that deployment type matches machine count
     local deployment
-    deployment=$(yq eval '.deployment' "$config_file")
+    deployment=$(yq '.deployment' "$config_file")
     local machine_count
-    machine_count=$(yq eval '.machines | length' "$config_file")
+    machine_count=$(yq '.machines | length' "$config_file")
 
     if [[ "$deployment" == "docker_compose" && $machine_count -gt 1 ]]; then
         log_verbose "Multi-machine Docker Compose deployment detected"
@@ -272,7 +272,7 @@ validate_semantic_rules() {
 
     # Check for port conflicts
     local ports
-    ports=$(yq eval '.services[].port // empty' "$config_file" | sort)
+    ports=$(yq '.services[].port // empty' "$config_file" 2>/dev/null | sort)
     local duplicate_ports
     duplicate_ports=$(echo "$ports" | uniq -d)
 
@@ -283,9 +283,9 @@ validate_semantic_rules() {
 
     # Check machine references in deploy fields
     local machine_names
-    machine_names=$(yq eval '.machines | keys | .[]' "$config_file")
+    machine_names=$(yq '.machines | keys | .[]' "$config_file" 2>/dev/null)
     local deploy_targets
-    deploy_targets=$(yq eval '.services[].deploy // empty' "$config_file" | grep -v '^(driver|all|random|any)$' || true)
+    deploy_targets=$(yq '.services[].deploy // empty' "$config_file" 2>/dev/null | grep -v '^(driver|all|random|any)$' || true)
 
     while read -r target; do
         if [[ -n "$target" ]]; then
@@ -330,10 +330,10 @@ main() {
     if [[ $VERBOSE -eq 1 ]]; then
         echo
         log_info "Configuration summary:"
-        echo "  Deployment type: $(yq eval '.deployment' "$CONFIG_FILE")"
-        echo "  Machines: $(yq eval '.machines | length' "$CONFIG_FILE")"
-        echo "  Services: $(yq eval '.services | length' "$CONFIG_FILE")"
-        echo "  Enabled services: $(yq eval '.services | to_entries | map(select(.value.enabled // true)) | length' "$CONFIG_FILE")"
+        echo "  Deployment type: $(yq '.deployment' "$CONFIG_FILE")"
+        echo "  Machines: $(yq '.machines | length' "$CONFIG_FILE")"
+        echo "  Services: $(yq '.services | length' "$CONFIG_FILE")"
+        echo "  Enabled services: $(yq '.services | to_entries | map(select(.value.enabled // true)) | length' "$CONFIG_FILE" 2>/dev/null || echo "N/A")"
     fi
 }
 
