@@ -219,7 +219,11 @@ jobs:
           success_count=0
           total_count=4
 
-          for result in "${{ needs.fast-tests.result }}" "${{ needs.performance-tests.result }}" "${{ needs.yaml-validation.result }}" "${{ needs.generation-validation.result }}"; do
+          for result in \
+            "${{ needs.fast-tests.result }}" \
+            "${{ needs.performance-tests.result }}" \
+            "${{ needs.yaml-validation.result }}" \
+            "${{ needs.generation-validation.result }}"; do
             if [ "$result" = "success" ]; then
               success_count=$((success_count + 1))
             fi
