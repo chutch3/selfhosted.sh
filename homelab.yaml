@@ -12,7 +12,7 @@ environment:
   UID: 1000
   GID: 1000
   BASE_DOMAIN: diyhub.dev
-  WILDCARD_DOMAIN: *.diyhub.dev
+  WILDCARD_DOMAIN: "*.diyhub.dev"
   CF_Key: 231e4824225369528b2c5b95e8095bd4a5574
   CF_Email: chutchens91@gmail.com
   ACME_SH_EMAIL: chutchens91@gmail.com
