@@ -104,6 +104,13 @@ teardown() {
         # Ensure mocking is enabled (from enhanced_test_helper.bash)
         export -f mock_ssh
         alias ssh=mock_ssh
+        
+        # Mock SSH connectivity test to always succeed in CI
+        ssh_test_connection() {
+            echo "Mocked SSH test for $1" >&2
+            return 0
+        }
+        export -f ssh_test_connection
 
         time_operation "Deployment Coordination" deploy_to_all_machines "$TEST_CONFIG"
         assert_within_time_limit 10
