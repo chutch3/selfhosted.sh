@@ -394,8 +394,8 @@ get_machine_labels() {
 translate_to_docker_swarm() {
     local config_file="${1:-$HOMELAB_CONFIG}"
 
-    # Validate config first
-    validate_homelab_config "$config_file" >&2 || return 1
+    # Validate config first (redirect to stderr)
+    validate_homelab_config "$config_file" >/dev/null 2>&1 || return 1
 
     # Start Swarm stack YAML
     echo "version: '3.8'"
