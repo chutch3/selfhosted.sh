@@ -97,13 +97,17 @@ get_services_for_machine() {
                 # Deploy on first machine (driver)
                 local first_machine
                 first_machine=$(get_machine_list | head -n1)
-                [[ "$machine_name" == "$first_machine" ]] && echo "$service"
+                if [[ "$machine_name" == "$first_machine" ]]; then
+                    echo "$service"
+                fi
                 ;;
             "any"|"random")
                 # For simplicity, deploy on first machine for "any" and "random"
                 local first_machine
                 first_machine=$(get_machine_list | head -n1)
-                [[ "$machine_name" == "$first_machine" ]] && echo "$service"
+                if [[ "$machine_name" == "$first_machine" ]]; then
+                    echo "$service"
+                fi
                 ;;
             "$machine_name")
                 # Deploy on specific machine
@@ -111,6 +115,9 @@ get_services_for_machine() {
                 ;;
         esac
     done <<< "$all_services"
+
+    # Ensure function always returns 0
+    return 0
 }
 
 # Function: generate_docker_compose_for_machine
