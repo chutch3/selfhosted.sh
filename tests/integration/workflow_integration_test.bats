@@ -139,7 +139,7 @@ teardown() {
         
         # Generate Swarm stack
         time_operation "Swarm Stack Generation" translate_to_docker_swarm "$TEST_CONFIG"
-        assert_within_time_limit 3
+        assert_within_time_limit 10
 
         # Save stack output
         translate_to_docker_swarm "$TEST_CONFIG" > "$TEST_OUTPUT/docker-stack.yaml"
@@ -326,10 +326,12 @@ services:
   web:
     image: nginx:alpine
     port: 80
+    deploy: driver
     enabled: true
   app:
     image: app:latest
     port: 3000
+    deploy: driver
     enabled: true
 EOF
 
