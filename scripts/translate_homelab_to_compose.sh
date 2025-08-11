@@ -340,10 +340,16 @@ EOF
     while IFS= read -r service; do
         [[ -z "$service" ]] && continue
 
-        # Check if this is a web service that needs nginx proxy
+                # Check if this is a web service that needs nginx proxy
         if is_web_service "$service" "$HOMELAB_CONFIG"; then
             local port
             port=$(yq ".services[\"$service\"].port" "$HOMELAB_CONFIG" 2>/dev/null | tr -d '"')
+
+            # Skip if no port (can't proxy without knowing the port)
+            if [[ -z "$port" || "$port" == "null" ]]; then
+                log_info "  Skipping nginx config for $service: no port specified"
+                continue
+            fi
 
             # Get custom domain or use default pattern
             local service_domain
@@ -608,30 +614,42 @@ main() {
 }
 
 # Function: is_web_service
-# Description: Determines if a service is a web service that needs nginx proxy
+# Description: Determines if a service should be exposed via nginx proxy
 # Arguments: $1 - service name, $2 - config file path
-# Returns: 0 if web service, 1 if not
+# Returns: 0 if service should be exposed, 1 if not
 is_web_service() {
     local service="$1"
     local config_file="${2:-$HOMELAB_CONFIG}"
 
+    # Check if service has a custom domain configured
+    local custom_domain
+    custom_domain=$(yq ".services[\"$service\"].domain" "$config_file" 2>/dev/null | tr -d '"')
+
+    if [[ -n "$custom_domain" && "$custom_domain" != "null" ]]; then
+        return 0  # Has explicit domain configuration
+    fi
+
+    # Check if service has a port (indicating it's a service that could be exposed)
+    # and doesn't explicitly disable web exposure
     local port
     port=$(yq ".services[\"$service\"].port" "$config_file" 2>/dev/null | tr -d '"')
 
-    # Consider it a web service if it has a port and it's not a typical database/cache port
-    if [[ -n "$port" && "$port" != "null" ]]; then
-        # Common non-web ports (databases, caches, etc.)
-        case "$port" in
-            5432|3306|27017|6379|9200|5672|1433|1521|5984|8086|9042|7000|7001)
-                return 1  # Not a web service
-                ;;
-            *)
-                return 0  # Likely a web service
-                ;;
-        esac
+    local web_enabled
+    web_enabled=$(yq ".services[\"$service\"].web" "$config_file" 2>/dev/null | tr -d '"')
+
+    # Default web to true if not specified
+    if [[ -z "$web_enabled" || "$web_enabled" == "null" ]]; then
+        web_enabled="true"
     fi
 
-    return 1  # No port or null port
+    # Service is a web service if:
+    # 1. It has a port AND
+    # 2. web is not explicitly set to false
+    if [[ -n "$port" && "$port" != "null" && "$web_enabled" != "false" ]]; then
+        return 0  # Service should be exposed
+    fi
+
+    return 1  # Service should not be exposed via nginx
 }
 
 # Function: get_base_domain
