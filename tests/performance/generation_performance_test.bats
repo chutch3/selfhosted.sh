@@ -33,10 +33,12 @@ teardown() {
     if [ -d "$PERFORMANCE_RESULTS_DIR" ] && [ -n "$BATS_TEST_NAME" ]; then
         local result_file="$PERFORMANCE_RESULTS_DIR/${BATS_TEST_NAME// /_}.txt"
         if [ -n "$OPERATION_DURATION" ]; then
-            echo "Test: $BATS_TEST_NAME" >> "$result_file"
-            echo "Duration: ${OPERATION_DURATION}s" >> "$result_file"
-            echo "Timestamp: $(date)" >> "$result_file"
-            echo "---" >> "$result_file"
+            {
+                echo "Test: $BATS_TEST_NAME"
+                echo "Duration: ${OPERATION_DURATION}s"
+                echo "Timestamp: $(date)"
+                echo "---"
+            } >> "$result_file"
         fi
     fi
 
@@ -50,7 +52,7 @@ teardown() {
 @test "Docker Compose generation - small config (1 machine, 3 services) under 2s" {
     create_test_homelab_config "docker_compose" 1 3
 
-    time_operation "Small Compose Generation" generate_all_bundles "$TEST_CONFIG"
+    time_operation "Small Compose Generation" translate_homelab_to_compose "$TEST_CONFIG"
     [ $status -eq 0 ]
     assert_within_time_limit 2
 
@@ -60,7 +62,7 @@ teardown() {
 @test "Docker Compose generation - medium config (3 machines, 10 services) under 5s" {
     create_test_homelab_config "docker_compose" 3 10
 
-    time_operation "Medium Compose Generation" generate_all_bundles "$TEST_CONFIG"
+    time_operation "Medium Compose Generation" translate_homelab_to_compose "$TEST_CONFIG"
     [ $status -eq 0 ]
     assert_within_time_limit 5
 
@@ -70,7 +72,7 @@ teardown() {
 @test "Docker Compose generation - large config (5 machines, 20 services) under 10s" {
     create_test_homelab_config "docker_compose" 5 20
 
-    time_operation "Large Compose Generation" generate_all_bundles "$TEST_CONFIG"
+    time_operation "Large Compose Generation" translate_homelab_to_compose "$TEST_CONFIG"
     [ $status -eq 0 ]
     assert_within_time_limit 10
 
@@ -80,7 +82,7 @@ teardown() {
 @test "Docker Compose generation - extra large config (10 machines, 50 services) under 30s" {
     create_test_homelab_config "docker_compose" 10 50
 
-    time_operation "Extra Large Compose Generation" generate_all_bundles "$TEST_CONFIG"
+    time_operation "Extra Large Compose Generation" translate_homelab_to_compose "$TEST_CONFIG"
     [ $status -eq 0 ]
     assert_within_time_limit 30
 
@@ -135,11 +137,13 @@ teardown() {
 
     # Monitor memory usage during generation (if /usr/bin/time available)
     if command -v /usr/bin/time >/dev/null 2>&1; then
-        /usr/bin/time -f "%M" generate_all_bundles "$TEST_CONFIG" 2> "$TEST_DIR/memory_usage.txt"
-        [ $? -eq 0 ]
+        export HOMELAB_CONFIG="$TEST_CONFIG"
+        export OUTPUT_DIR="$TEST_OUTPUT"
+        /usr/bin/time -f "%M" translate_homelab_to_compose 2> "$TEST_DIR/memory_usage.txt"
+        [ $status -eq 0 ]
 
         local memory_kb
-        memory_kb=$(cat "$TEST_DIR/memory_usage.txt" | tail -1)
+        memory_kb=$(tail -1 "$TEST_DIR/memory_usage.txt")
 
         # Should use less than 100MB (102400 KB)
         if [ "$memory_kb" -gt 102400 ]; then
@@ -157,11 +161,13 @@ teardown() {
     create_test_homelab_config "docker_compose" 5 30
 
     if command -v /usr/bin/time >/dev/null 2>&1; then
-        /usr/bin/time -f "%M" generate_all_bundles "$TEST_CONFIG" 2> "$TEST_DIR/memory_usage.txt"
-        [ $? -eq 0 ]
+        export HOMELAB_CONFIG="$TEST_CONFIG"
+        export OUTPUT_DIR="$TEST_OUTPUT"
+        /usr/bin/time -f "%M" translate_homelab_to_compose 2> "$TEST_DIR/memory_usage.txt"
+        [ $status -eq 0 ]
 
         local memory_kb
-        memory_kb=$(cat "$TEST_DIR/memory_usage.txt" | tail -1)
+        memory_kb=$(tail -1 "$TEST_DIR/memory_usage.txt")
 
         # Should use less than 200MB (204800 KB)
         if [ "$memory_kb" -gt 204800 ]; then
@@ -226,7 +232,9 @@ teardown() {
     for count in "${machine_counts[@]}"; do
         create_test_homelab_config "docker_compose" "$count" 5
 
-        time_operation "Scaling Test $count machines" generate_all_bundles "$TEST_CONFIG"
+        export HOMELAB_CONFIG="$TEST_CONFIG"
+        export OUTPUT_DIR="$TEST_OUTPUT"
+        time_operation "Scaling Test $count machines" translate_homelab_to_compose
         [ $status -eq 0 ]
 
         durations+=("$OPERATION_DURATION")
@@ -260,7 +268,9 @@ teardown() {
     for count in "${service_counts[@]}"; do
         create_test_homelab_config "docker_compose" 2 "$count"
 
-        time_operation "Service Scaling Test $count services" generate_all_bundles "$TEST_CONFIG"
+        export HOMELAB_CONFIG="$TEST_CONFIG"
+        export OUTPUT_DIR="$TEST_OUTPUT"
+        time_operation "Service Scaling Test $count services" translate_homelab_to_compose
         [ $status -eq 0 ]
 
         durations+=("$OPERATION_DURATION")
@@ -294,7 +304,9 @@ teardown() {
     create_test_homelab_config "docker_compose" 3 10
 
     # Run generation and record time
-    time_operation "Regression Baseline" generate_all_bundles "$TEST_CONFIG"
+    export HOMELAB_CONFIG="$TEST_CONFIG"
+    export OUTPUT_DIR="$TEST_OUTPUT"
+    time_operation "Regression Baseline" translate_homelab_to_compose
     [ $status -eq 0 ]
 
     local current_duration="$OPERATION_DURATION"
@@ -354,7 +366,7 @@ teardown() {
         local config_file="$TEST_DIR/homelab_$i.yaml"
         local output_dir="$TEST_OUTPUT/concurrent_$i"
 
-        (generate_all_bundles "$config_file" "$output_dir") &
+        (export HOMELAB_CONFIG="$config_file"; export OUTPUT_DIR="$output_dir"; translate_homelab_to_compose) &
         pids+=($!)
     done
 

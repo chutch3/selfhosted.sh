@@ -41,7 +41,9 @@ teardown() {
     create_test_homelab_config "docker_compose" 1 3
 
     # Generate bundles
-    time_operation "Single Machine Bundle Generation" generate_all_bundles "$TEST_CONFIG"
+    export HOMELAB_CONFIG="$TEST_CONFIG"
+    export OUTPUT_DIR="$TEST_OUTPUT"
+    time_operation "Single Machine Bundle Generation" translate_homelab_to_compose
     [ $status -eq 0 ]
     assert_within_time_limit 3
 
@@ -68,7 +70,7 @@ teardown() {
     create_test_homelab_config "docker_compose" 3 5
 
     # Generate bundles
-    time_operation "Multi Machine Bundle Generation" generate_all_bundles "$TEST_CONFIG"
+    time_operation "Multi Machine Bundle Generation" translate_homelab_to_compose "$TEST_CONFIG"
     [ $status -eq 0 ]
     assert_within_time_limit 5
 
@@ -92,7 +94,7 @@ teardown() {
 
 @test "Docker Compose deployment coordination (mocked)" {
     create_test_homelab_config "docker_compose" 3 5
-    generate_all_bundles "$TEST_CONFIG"
+    translate_homelab_to_compose "$TEST_CONFIG"
 
     # Test deployment coordination with mocked SSH
     if [ -f "$PROJECT_ROOT/scripts/deploy_compose_bundles.sh" ]; then
@@ -245,7 +247,7 @@ EOF
         yq '.services.jellyfin' "$TEST_DIR/homelab.yaml" | grep -q "jellyfin"
 
         # Test that migrated config can generate bundles
-        generate_all_bundles "$TEST_DIR/homelab.yaml" "$TEST_OUTPUT"
+        translate_homelab_to_compose "$TEST_DIR/homelab.yaml" "$TEST_OUTPUT"
         [ -f "$TEST_OUTPUT/driver/docker-compose.yaml" ]
     else
         skip "Migration script not available"
@@ -260,7 +262,7 @@ EOF
         "$PROJECT_ROOT/scripts/migrate_to_homelab_yaml.sh"
 
         # Generate bundles from migrated config
-        generate_all_bundles "$TEST_DIR/homelab.yaml" "$TEST_OUTPUT/migrated"
+        translate_homelab_to_compose "$TEST_DIR/homelab.yaml" "$TEST_OUTPUT/migrated"
 
         # Validate functionality preservation
         local migrated_services
@@ -298,7 +300,7 @@ services:
 EOF
 
     # Test Docker Compose generation
-    generate_all_bundles "$TEST_CONFIG"
+    translate_homelab_to_compose "$TEST_CONFIG"
     assert_docker_compose_valid "$TEST_OUTPUT/driver/docker-compose.yaml"
 
     # Convert to Swarm and test
@@ -326,8 +328,8 @@ EOF
     create_test_homelab_config "docker_compose" 1 2
 
     # Test with missing translation functions
-    if ! command -v generate_all_bundles >/dev/null 2>&1; then
-        run generate_all_bundles "$TEST_CONFIG"
+    if ! command -v translate_homelab_to_compose >/dev/null 2>&1; then
+        run translate_homelab_to_compose "$TEST_CONFIG"
         [ $status -ne 0 ]
         echo "Expected failure when translation functions not available"
     fi
@@ -346,7 +348,7 @@ services:
 EOF
 
     # Should fail early with validation error
-    run generate_all_bundles "$TEST_CONFIG"
+    run translate_homelab_to_compose "$TEST_CONFIG"
     [ $status -ne 0 ]
 }
 
@@ -360,7 +362,7 @@ services: {}
 EOF
 
     # Should handle empty services gracefully
-    run generate_all_bundles "$TEST_CONFIG"
+    run translate_homelab_to_compose "$TEST_CONFIG"
     # May succeed with empty output or fail with validation error
     echo "Empty services result: $status"
 }
@@ -372,7 +374,7 @@ EOF
 @test "workflow performance - small configuration" {
     create_test_homelab_config "docker_compose" 1 3
 
-    time_operation "Small Config Workflow" generate_all_bundles "$TEST_CONFIG"
+    time_operation "Small Config Workflow" translate_homelab_to_compose "$TEST_CONFIG"
     [ $status -eq 0 ]
     assert_within_time_limit 2
 }
@@ -380,7 +382,7 @@ EOF
 @test "workflow performance - medium configuration" {
     create_test_homelab_config "docker_compose" 3 10
 
-    time_operation "Medium Config Workflow" generate_all_bundles "$TEST_CONFIG"
+    time_operation "Medium Config Workflow" translate_homelab_to_compose "$TEST_CONFIG"
     [ $status -eq 0 ]
     assert_within_time_limit 5
 }
@@ -388,7 +390,7 @@ EOF
 @test "workflow performance - large configuration" {
     create_test_homelab_config "docker_compose" 5 20
 
-    time_operation "Large Config Workflow" generate_all_bundles "$TEST_CONFIG"
+    time_operation "Large Config Workflow" translate_homelab_to_compose "$TEST_CONFIG"
     [ $status -eq 0 ]
     assert_within_time_limit 10
 }
@@ -399,7 +401,7 @@ EOF
 
 @test "service connectivity validation (simulated)" {
     create_test_homelab_config "docker_compose" 3 5
-    generate_all_bundles "$TEST_CONFIG"
+    translate_homelab_to_compose "$TEST_CONFIG"
 
     # Simulate connectivity testing for each machine
     for machine_dir in "$TEST_OUTPUT"/*; do
@@ -419,7 +421,7 @@ EOF
 
                     if [ "$port" != "null" ] && [ -n "$port" ]; then
                         simulate_connectivity_test "$machine" "$service" "$port"
-                        [ $? -eq 0 ]
+                        [ $status -eq 0 ]
                     fi
                 fi
             done <<< "$services"
@@ -429,7 +431,7 @@ EOF
 
 @test "nginx proxy configuration validation" {
     create_test_homelab_config "docker_compose" 2 4
-    generate_all_bundles "$TEST_CONFIG"
+    translate_homelab_to_compose "$TEST_CONFIG"
 
     # Verify nginx configurations for each machine
     for nginx_conf in "$TEST_OUTPUT"/*/nginx/nginx.conf; do

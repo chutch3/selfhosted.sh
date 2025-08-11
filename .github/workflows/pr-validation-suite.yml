@@ -37,6 +37,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq bc bats
 
+          # Install Poetry for pre-commit dependencies
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
       - name: Run fast tests
         run: task test-fast
 
@@ -64,6 +68,10 @@ jobs:
           # Install jq, bc, time, and BATS
           sudo apt-get update
           sudo apt-get install -y jq bc time bats
+
+          # Install Poetry for pre-commit dependencies
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Run performance tests
         run: task test-performance
@@ -138,9 +146,21 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install yq and Docker Compose
+          # Install yq
           sudo wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_amd64"
           sudo chmod +x /usr/local/bin/yq
+
+          # Install Docker's official GPG key and repository
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl gnupg
+          sudo install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+          sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+          # Add Docker repository
+          echo "deb [arch=\"$(dpkg --print-architecture)\" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+          # Install Docker Compose and Nginx
           sudo apt-get update
           sudo apt-get install -y docker-compose-plugin nginx
 
@@ -157,7 +177,9 @@ jobs:
             export OUTPUT_DIR="validation_output"
             mkdir -p "$OUTPUT_DIR"
 
-            if generate_all_bundles "examples/homelab-basic.yaml" "$OUTPUT_DIR"; then
+            # Set config file and run translation
+            export HOMELAB_CONFIG="examples/homelab-basic.yaml"
+            if translate_homelab_to_compose; then
               echo "✅ Bundle generation successful"
 
               # Validate generated Docker Compose files
