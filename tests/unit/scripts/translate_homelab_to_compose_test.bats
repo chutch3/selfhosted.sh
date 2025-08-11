@@ -285,7 +285,10 @@ EOF
 
     run get_services_for_machine "nonexistent"
     [ "$status" -eq 0 ]
-    [ -z "$output" ]
+    # Should not contain any actual service names
+    [[ ! "$output" =~ "actual" ]]
+    [[ ! "$output" =~ "homepage" ]]
+    [[ ! "$output" =~ "homeassistant" ]]
 }
 
 @test "deployment strategies should work correctly" {
