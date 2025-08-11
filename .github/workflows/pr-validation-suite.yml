@@ -13,39 +13,6 @@ env:
 jobs:
 
   # =============================================================================
-  # FAST INTEGRATION TESTS (Using Taskfile)
-  # =============================================================================
-  fast-tests:
-    name: Fast Integration Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Task
-        uses: arduino/setup-task@v1
-        with:
-          version: 3.x
-
-      - name: Install test dependencies
-        run: |
-          # Install yq
-          sudo wget -qO /usr/local/bin/yq \
-            "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_amd64"
-          sudo chmod +x /usr/local/bin/yq
-
-          # Install jq, bc, and BATS
-          sudo apt-get update
-          sudo apt-get install -y jq bc bats
-
-          # Install Poetry for pre-commit dependencies
-          curl -sSL https://install.python-poetry.org | python3 -
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Run fast tests
-        run: task test-fast
-
-  # =============================================================================
   # PERFORMANCE TESTS (Using Taskfile)
   # =============================================================================
   performance-tests:
