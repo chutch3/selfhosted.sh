@@ -8,48 +8,40 @@ on:
 
 env:
   # Test configuration
-  BATS_VERSION: "1.10.0"
   YQ_VERSION: "v4.35.2"
 
 jobs:
 
   # =============================================================================
-  # INTEGRATION TESTS
+  # FAST INTEGRATION TESTS (Using Taskfile)
   # =============================================================================
-  integration-tests:
-    name: Integration Tests
+  fast-tests:
+    name: Fast Integration Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Task
+        uses: arduino/setup-task@v1
+        with:
+          version: 3.x
+
+      - name: Install test dependencies
         run: |
           # Install yq
           sudo wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_amd64"
           sudo chmod +x /usr/local/bin/yq
 
-          # Install jq and bc
+          # Install jq, bc, and BATS
           sudo apt-get update
-          sudo apt-get install -y jq bc
+          sudo apt-get install -y jq bc bats
 
-          # Install BATS
-          sudo apt-get install -y bats
-
-      - name: Run schema validation tests
-        run: |
-          echo "🔍 Running schema validation tests..."
-          bats tests/integration/schema_validation_test.bats --tap
-          echo "✅ Schema validation tests completed"
-
-      - name: Run workflow integration tests
-        run: |
-          echo "🔗 Running workflow integration tests..."
-          bats tests/integration/workflow_integration_test.bats --tap || true
-          echo "ℹ️  Workflow integration tests completed (some may skip due to missing functions)"
+      - name: Run fast tests
+        run: task test-fast
 
   # =============================================================================
-  # PERFORMANCE TESTS
+  # PERFORMANCE TESTS (Using Taskfile)
   # =============================================================================
   performance-tests:
     name: Performance Tests
@@ -58,24 +50,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Task
+        uses: arduino/setup-task@v1
+        with:
+          version: 3.x
+
+      - name: Install test dependencies
         run: |
           # Install yq
           sudo wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_amd64"
           sudo chmod +x /usr/local/bin/yq
 
-          # Install jq and bc
+          # Install jq, bc, time, and BATS
           sudo apt-get update
-          sudo apt-get install -y jq bc time
-
-          # Install BATS
-          sudo apt-get install -y bats
+          sudo apt-get install -y jq bc time bats
 
       - name: Run performance tests
-        run: |
-          echo "⚡ Running performance tests..."
-          bats tests/performance/**/*.bats --tap
-          echo "✅ Performance tests completed"
+        run: task test-performance
 
       - name: Upload performance results
         if: always()
@@ -88,10 +79,10 @@ jobs:
           retention-days: 7
 
   # =============================================================================
-  # VALIDATION TESTS (CI/CD Safe)
+  # YAML AND SCHEMA VALIDATION
   # =============================================================================
-  validation-tests:
-    name: Configuration Validation
+  yaml-validation:
+    name: YAML and Schema Validation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -99,40 +90,36 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install yq
+          # Install yq and jq
           sudo wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_amd64"
           sudo chmod +x /usr/local/bin/yq
-
-          # Install jq
           sudo apt-get update
           sudo apt-get install -y jq
 
-      - name: Validate schema files
+      - name: Validate JSON schema
         run: |
           echo "📋 Validating JSON schema..."
           if [ -f "schemas/homelab-schema.json" ]; then
             jq . schemas/homelab-schema.json >/dev/null
             echo "✅ JSON schema is valid"
+          else
+            echo "⚠️  Schema file not found"
           fi
 
-      - name: Validate example configurations
+      - name: Validate YAML files
         run: |
-          echo "📝 Validating example configurations..."
+          echo "📝 Validating YAML files..."
+
+          # Validate examples
           for config in examples/*.yaml; do
             if [ -f "$config" ]; then
               echo "Validating $config..."
-              if [ -f "scripts/simple_homelab_validator.sh" ]; then
-                timeout 30 scripts/simple_homelab_validator.sh "$config" || echo "⚠️  Validation timeout or error for $config"
-              else
-                yq . "$config" >/dev/null && echo "✅ YAML syntax valid: $config"
-              fi
+              yq . "$config" >/dev/null && echo "✅ YAML syntax valid: $config"
             fi
           done
 
-      - name: Validate test fixtures
-        run: |
-          echo "🧪 Validating test fixtures..."
-          for config in tests/fixtures/configs/valid_*.yaml; do
+          # Validate test fixtures
+          for config in tests/fixtures/configs/*.yaml; do
             if [ -f "$config" ]; then
               echo "Validating $config..."
               yq . "$config" >/dev/null && echo "✅ YAML syntax valid: $config"
@@ -140,10 +127,10 @@ jobs:
           done
 
   # =============================================================================
-  # DOCKER COMPOSE VALIDATION (No Deployment)
+  # GENERATION VALIDATION (No Deployment)
   # =============================================================================
-  docker-compose-validation:
-    name: Docker Compose Validation
+  generation-validation:
+    name: Generation Validation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -151,81 +138,40 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install yq
+          # Install yq and Docker Compose
           sudo wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_amd64"
           sudo chmod +x /usr/local/bin/yq
-
-          # Install Docker Compose
           sudo apt-get update
-          sudo apt-get install -y docker-compose-plugin
+          sudo apt-get install -y docker-compose-plugin nginx
 
-      - name: Test Docker Compose generation
+      - name: Test configuration generation
         run: |
-          echo "🐳 Testing Docker Compose generation..."
+          echo "🔧 Testing configuration generation..."
 
           # Test with example configuration
           if [ -f "examples/homelab-basic.yaml" ] && [ -f "scripts/translate_homelab_to_compose.sh" ]; then
-            echo "Testing translation engine..."
-
             # Source the script
             source scripts/translate_homelab_to_compose.sh
 
             # Generate bundles
-            export OUTPUT_DIR="test_output"
+            export OUTPUT_DIR="validation_output"
             mkdir -p "$OUTPUT_DIR"
 
             if generate_all_bundles "examples/homelab-basic.yaml" "$OUTPUT_DIR"; then
               echo "✅ Bundle generation successful"
 
-              # Validate generated compose files
+              # Validate generated Docker Compose files
               for compose_file in "$OUTPUT_DIR"/*/docker-compose.yaml; do
                 if [ -f "$compose_file" ]; then
-                  echo "Validating $compose_file..."
-                  docker compose -f "$compose_file" config --quiet && echo "✅ Valid Docker Compose file: $compose_file"
+                  echo "Validating Docker Compose: $compose_file"
+                  docker compose -f "$compose_file" config --quiet && echo "✅ Valid Docker Compose file"
                 fi
               done
-            else
-              echo "⚠️  Bundle generation failed or not available"
-            fi
-          else
-            echo "⚠️  Translation script or example config not available"
-          fi
 
-  # =============================================================================
-  # NGINX CONFIGURATION VALIDATION
-  # =============================================================================
-  nginx-validation:
-    name: Nginx Configuration Validation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          # Install yq and nginx
-          sudo wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${{ env.YQ_VERSION }}/yq_linux_amd64"
-          sudo chmod +x /usr/local/bin/yq
-          sudo apt-get update
-          sudo apt-get install -y nginx
-
-      - name: Test Nginx configuration generation
-        run: |
-          echo "🌐 Testing Nginx configuration generation..."
-
-          if [ -f "scripts/translate_homelab_to_compose.sh" ] && [ -f "examples/homelab-basic.yaml" ]; then
-            # Source the script
-            source scripts/translate_homelab_to_compose.sh
-
-            # Generate bundles with Nginx configs
-            export OUTPUT_DIR="nginx_test_output"
-            mkdir -p "$OUTPUT_DIR"
-
-            if generate_all_bundles "examples/homelab-basic.yaml" "$OUTPUT_DIR"; then
-              # Test Nginx configurations
+              # Validate generated Nginx configurations
               for nginx_conf in "$OUTPUT_DIR"/*/nginx/nginx.conf; do
                 if [ -f "$nginx_conf" ]; then
-                  echo "Testing Nginx config: $nginx_conf"
+                  echo "Validating Nginx config: $nginx_conf"
 
                   # Create test environment
                   test_dir=$(mktemp -d)
@@ -234,17 +180,17 @@ jobs:
                   touch "$test_dir/mime.types"
 
                   # Test syntax
-                  nginx -t -c "$test_dir/nginx.conf" -p "$test_dir" && echo "✅ Valid Nginx config: $nginx_conf"
-
-                  # Cleanup
+                  nginx -t -c "$test_dir/nginx.conf" -p "$test_dir" && echo "✅ Valid Nginx config"
                   rm -rf "$test_dir"
                 fi
               done
             else
-              echo "⚠️  Bundle generation failed or not available"
+              echo "⚠️  Bundle generation failed"
+              exit 1
             fi
           else
-            echo "⚠️  Translation script or example config not available"
+            echo "⚠️  Required files not found"
+            exit 1
           fi
 
   # =============================================================================
@@ -253,7 +199,7 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [integration-tests, performance-tests, validation-tests, docker-compose-validation, nginx-validation]
+    needs: [fast-tests, performance-tests, yaml-validation, generation-validation]
     if: always()
     steps:
       - name: Checkout code
@@ -261,22 +207,21 @@ jobs:
 
       - name: Generate test summary
         run: |
-          echo "📊 Integration and Performance Test Summary"
-          echo "=========================================="
+          echo "📊 PR Validation Test Summary"
+          echo "============================="
           echo ""
           echo "Job Results:"
-          echo "- Integration Tests: ${{ needs.integration-tests.result }}"
+          echo "- Fast Integration Tests: ${{ needs.fast-tests.result }}"
           echo "- Performance Tests: ${{ needs.performance-tests.result }}"
-          echo "- Validation Tests: ${{ needs.validation-tests.result }}"
-          echo "- Docker Compose Validation: ${{ needs.docker-compose-validation.result }}"
-          echo "- Nginx Validation: ${{ needs.nginx-validation.result }}"
+          echo "- YAML & Schema Validation: ${{ needs.yaml-validation.result }}"
+          echo "- Generation Validation: ${{ needs.generation-validation.result }}"
           echo ""
 
           # Count successes
           success_count=0
-          total_count=5
+          total_count=4
 
-          for result in "${{ needs.integration-tests.result }}" "${{ needs.performance-tests.result }}" "${{ needs.validation-tests.result }}" "${{ needs.docker-compose-validation.result }}" "${{ needs.nginx-validation.result }}"; do
+          for result in "${{ needs.fast-tests.result }}" "${{ needs.performance-tests.result }}" "${{ needs.yaml-validation.result }}" "${{ needs.generation-validation.result }}"; do
             if [ "$result" = "success" ]; then
               success_count=$((success_count + 1))
             fi
@@ -285,7 +230,7 @@ jobs:
           echo "Overall Success Rate: $success_count/$total_count"
 
           if [ $success_count -eq $total_count ]; then
-            echo "🎉 All integration and performance tests passed!"
+            echo "🎉 All PR validation tests passed!"
             exit 0
           else
             echo "❌ Some test suites failed"
@@ -322,9 +267,9 @@ jobs:
             echo "- Container health checks"
             echo "- Multi-machine testing (with test_machines.env)"
             echo ""
-            echo "To run local tests:"
-            echo "  ./scripts/run_local_tests.sh"
-            echo "  ./scripts/run_local_tests.sh --help"
+            echo "To run these locally:"
+            echo "  task test-local"
+            echo "  task test-comprehensive  # All tests including local"
             echo ""
           fi
 
