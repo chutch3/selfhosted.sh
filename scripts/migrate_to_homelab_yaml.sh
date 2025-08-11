@@ -319,8 +319,8 @@ extract_services() {
 
                 # Extract port information
                 local port
-                port=$(yq ".services.$service.port // empty" "$SERVICES_YAML" | tr -d '"')
-                if [[ -n "$port" ]]; then
+                port=$(yq ".services.$service.port // null" "$SERVICES_YAML" | tr -d '"')
+                if [[ -n "$port" && "$port" != "null" ]]; then
                     output="${output}    port: ${port}\n"
                 else
                     # Try to extract from compose ports
@@ -338,8 +338,8 @@ extract_services() {
 
                 # Determine storage needs
                 local has_volumes
-                has_volumes=$(yq ".services.$service.volumes // empty" "$SERVICES_YAML" 2>/dev/null)
-                if [[ -n "$has_volumes" ]]; then
+                has_volumes=$(yq ".services.$service.volumes // null" "$SERVICES_YAML" 2>/dev/null)
+                if [[ -n "$has_volumes" && "$has_volumes" != "null" ]]; then
                     output="${output}    storage: true\n"
                 fi
 
@@ -379,8 +379,8 @@ extract_services() {
                 if [[ "$DEPLOYMENT_TYPE" == "docker_swarm" ]]; then
                     # Check if there are specific swarm deployment constraints
                     local swarm_deploy
-                    swarm_deploy=$(yq ".swarm.services.$service.deploy // empty" "$SERVICES_YAML" 2>/dev/null)
-                    if [[ -n "$swarm_deploy" ]]; then
+                    swarm_deploy=$(yq ".swarm.services.$service.deploy // null" "$SERVICES_YAML" 2>/dev/null)
+                    if [[ -n "$swarm_deploy" && "$swarm_deploy" != "null" ]]; then
                         # Check for placement constraints
                         local constraints
                         constraints=$(yq ".swarm.services.$service.deploy.placement.constraints // []" "$SERVICES_YAML" 2>/dev/null)
@@ -416,18 +416,18 @@ extract_services() {
 
                     # Check for depends_on
                     local depends_on
-                    depends_on=$(yq ".services.$service.compose.depends_on // empty" "$SERVICES_YAML" 2>/dev/null)
-                    if [[ -n "$depends_on" ]]; then
+                    depends_on=$(yq ".services.$service.compose.depends_on // null" "$SERVICES_YAML" 2>/dev/null)
+                    if [[ -n "$depends_on" && "$depends_on" != "null" ]]; then
                         has_complex_config=1
                     fi
 
                     # Check for special configurations
                     local privileged security_opt working_dir
-                    privileged=$(yq ".services.$service.compose.privileged // empty" "$SERVICES_YAML" 2>/dev/null)
-                    security_opt=$(yq ".services.$service.compose.security_opt // empty" "$SERVICES_YAML" 2>/dev/null)
-                    working_dir=$(yq ".services.$service.compose.working_dir // empty" "$SERVICES_YAML" 2>/dev/null)
+                    privileged=$(yq ".services.$service.compose.privileged // null" "$SERVICES_YAML" 2>/dev/null)
+                    security_opt=$(yq ".services.$service.compose.security_opt // null" "$SERVICES_YAML" 2>/dev/null)
+                    working_dir=$(yq ".services.$service.compose.working_dir // null" "$SERVICES_YAML" 2>/dev/null)
 
-                    if [[ -n "$privileged" || -n "$security_opt" || -n "$working_dir" ]]; then
+                    if [[ (-n "$privileged" && "$privileged" != "null") || (-n "$security_opt" && "$security_opt" != "null") || (-n "$working_dir" && "$working_dir" != "null") ]]; then
                         has_complex_config=1
                     fi
 
@@ -436,7 +436,7 @@ extract_services() {
                         output="${output}      ${DEPLOYMENT_TYPE}:\n"
 
                         # Add specific overrides based on what we found
-                        if [[ -n "$depends_on" ]]; then
+                        if [[ -n "$depends_on" && "$depends_on" != "null" ]]; then
                             output="${output}        depends_on: $(echo "$depends_on" | yq -o json -I=0)\n"
                         fi
 
@@ -456,7 +456,7 @@ extract_services() {
                             output="${output}        security_opt: $(echo "$security_opt" | yq -o json -I=0)\n"
                         fi
 
-                        if [[ -n "$working_dir" ]]; then
+                        if [[ -n "$working_dir" && "$working_dir" != "null" ]]; then
                             output="${output}        working_dir: \"${working_dir}\"\n"
                         fi
                     fi
