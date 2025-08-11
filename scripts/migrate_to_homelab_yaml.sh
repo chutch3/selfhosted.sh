@@ -518,7 +518,7 @@ extract_services() {
 
                         # Add specific overrides based on what we found
                         if [[ -n "$depends_on" && "$depends_on" != "null" ]]; then
-                            output="${output}        depends_on: $(echo "$depends_on" | yq -c '.')\n"
+                            output="${output}        depends_on: $(echo "$depends_on" | yq -c '.' 2>/dev/null || echo "$depends_on")\n"
                         fi
 
                         if [[ "$volumes" != "[]" && "$volumes" != "null" ]]; then
@@ -534,7 +534,7 @@ extract_services() {
                         fi
 
                         if [[ -n "$security_opt" && "$security_opt" != "null" ]]; then
-                            output="${output}        security_opt: $(echo "$security_opt" | yq -c '.')\n"
+                            output="${output}        security_opt: $(echo "$security_opt" | yq -c '.' 2>/dev/null || echo "$security_opt")\n"
                         fi
 
                         if [[ -n "$working_dir" && "$working_dir" != "null" ]]; then
