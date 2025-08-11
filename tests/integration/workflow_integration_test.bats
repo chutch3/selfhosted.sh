@@ -41,7 +41,7 @@ teardown() {
     # Generate bundles
     export HOMELAB_CONFIG="$TEST_CONFIG"
     export OUTPUT_DIR="$TEST_OUTPUT"
-    time_operation "Single Machine Bundle Generation" translate_homelab_to_compose
+    run time_operation "Single Machine Bundle Generation" translate_homelab_to_compose
     [ $status -eq 0 ]
     assert_within_time_limit 3
 

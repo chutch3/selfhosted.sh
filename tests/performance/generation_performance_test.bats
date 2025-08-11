@@ -232,7 +232,7 @@ teardown() {
 
         export HOMELAB_CONFIG="$TEST_CONFIG"
         export OUTPUT_DIR="$TEST_OUTPUT"
-        time_operation "Scaling Test $count machines" translate_homelab_to_compose
+        run time_operation "Scaling Test $count machines" translate_homelab_to_compose
         [ $status -eq 0 ]
 
         durations+=("$OPERATION_DURATION")
@@ -268,7 +268,7 @@ teardown() {
 
         export HOMELAB_CONFIG="$TEST_CONFIG"
         export OUTPUT_DIR="$TEST_OUTPUT"
-        time_operation "Service Scaling Test $count services" translate_homelab_to_compose
+        run time_operation "Service Scaling Test $count services" translate_homelab_to_compose
         [ $status -eq 0 ]
 
         durations+=("$OPERATION_DURATION")
@@ -304,7 +304,7 @@ teardown() {
     # Run generation and record time
     export HOMELAB_CONFIG="$TEST_CONFIG"
     export OUTPUT_DIR="$TEST_OUTPUT"
-    time_operation "Regression Baseline" translate_homelab_to_compose
+    run time_operation "Regression Baseline" translate_homelab_to_compose
     [ $status -eq 0 ]
 
     local current_duration="$OPERATION_DURATION"
