@@ -12,16 +12,14 @@ setup() {
     # Check for performance testing dependencies
     check_test_dependencies || skip "Missing performance testing dependencies"
 
-    # Source required scripts
+    # Source required scripts for Docker Compose testing
     if [ -f "$PROJECT_ROOT/scripts/translate_homelab_to_compose.sh" ]; then
         # shellcheck disable=SC1091
         source "$PROJECT_ROOT/scripts/translate_homelab_to_compose.sh"
     fi
 
-    if [ -f "$PROJECT_ROOT/scripts/translate_homelab_to_swarm.sh" ]; then
-        # shellcheck disable=SC1091
-        source "$PROJECT_ROOT/scripts/translate_homelab_to_swarm.sh"
-    fi
+    # Note: Not sourcing Swarm script to avoid function name conflicts
+    # Performance tests focus on Docker Compose functionality
 
     # Create performance results directory
     export PERFORMANCE_RESULTS_DIR="$TEST_DIR/performance_results"
