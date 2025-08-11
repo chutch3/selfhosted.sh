@@ -16,9 +16,14 @@ tasks:
     cmds:
       - echo "🧪 Running unit tests..."
       - bats tests/unit/scripts/*.bats
+      - echo "🧪 Unit tests completed with exit code: $?"
       - echo "🔍 Running integration tests..."
+      - echo "🔍 Running schema validation tests..."
       - bats tests/integration/schema_validation_test.bats
+      - echo "🔍 Schema validation completed with exit code: $?"
+      - echo "🔍 Running workflow integration tests..."
       - bats tests/integration/workflow_integration_test.bats
+      - echo "🔍 Workflow integration completed with exit code: $?"
       - echo "✅ All unit and integration tests completed"
 
   test-fast:
