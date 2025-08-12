@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.4.0 (2025-08-12)
+
+### Features
+
+- Docker Swarm Cluster Management - Complete Implementation [closes #39]
+  ([#48](https://github.com/chutch3/selfhosted.sh/pull/48),
+  [`c96207e`](https://github.com/chutch3/selfhosted.sh/commit/c96207e53229483c07b49de970a9b4f4e805ee99))
+
+
 ## v1.3.0 (2025-08-11)
 
 ### Features
