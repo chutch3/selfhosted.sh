@@ -672,53 +672,7 @@ start_enabled_services_modern() {
     return 0
 }
 
-# Function: migrate_from_legacy_enabled_services
-# Description: Migrates from .enabled-services file to services.yaml enabled flags
-# Arguments: None
-# Returns: 0 on success, 1 on failure
-migrate_from_legacy_enabled_services() {
-    local legacy_file="${PROJECT_ROOT}/.enabled-services"
 
-    if [ ! -f "$legacy_file" ]; then
-        echo "ℹ️  No legacy .enabled-services file found, migration not needed"
-        return 0
-    fi
-
-    if [ ! -f "$SERVICES_CONFIG" ]; then
-        echo "❌ Error: Services configuration not found at $SERVICES_CONFIG"
-        return 1
-    fi
-
-    echo "🔄 Migrating from legacy .enabled-services to services.yaml..."
-
-    # First, set all services to disabled
-    local services
-    services=$(yaml_parser get-services "$SERVICES_CONFIG")
-
-    while IFS= read -r service; do
-        [ -z "$service" ] && continue
-        yaml_parser set-enabled "$SERVICES_CONFIG" "$service" "false"
-    done <<< "$services"
-
-    # Read legacy file and enable those services
-    while IFS= read -r service; do
-        [ -z "$service" ] && continue
-        echo "  Migrating: $service"
-
-        if yaml_parser get-services "$SERVICES_CONFIG" | grep -q "^$service$"; then
-            yaml_parser set-enabled "$SERVICES_CONFIG" "$service" "true"
-        else
-            echo "  ⚠️  Warning: Service '$service' not found in services.yaml, skipping"
-        fi
-    done < "$legacy_file"
-
-    # Backup and remove legacy file
-    cp "$legacy_file" "${legacy_file}.backup"
-    rm "$legacy_file"
-
-    echo "✅ Migration completed. Legacy file backed up to .enabled-services.backup"
-    return 0
-}
 
 # Function: interactive_service_enablement
 # Description: Provides interactive service selection interface
@@ -1438,49 +1392,6 @@ start_enabled_services_from_generated() {
     return 0
 }
 
-# Function: cleanup_legacy_generated_files
-# Description: Removes old generated files after migration to consolidated structure
-# Arguments: None
-# Returns: 0 on success, 1 on failure
-cleanup_legacy_generated_files() {
-    echo "🧹 Cleaning up legacy generated files..."
 
-    local files_removed=0
-
-    # Remove legacy generated files (but preserve user data)
-    if [ -f "$PROJECT_ROOT/generated-docker-compose.yaml" ]; then
-        rm "$PROJECT_ROOT/generated-docker-compose.yaml"
-        files_removed=$((files_removed + 1))
-        echo "   Removed: generated-docker-compose.yaml"
-    fi
-
-    if [ -d "$PROJECT_ROOT/generated-nginx" ]; then
-        rm -rf "$PROJECT_ROOT/generated-nginx"
-        files_removed=$((files_removed + 1))
-        echo "   Removed: generated-nginx/"
-    fi
-
-    if [ -f "$PROJECT_ROOT/generated-swarm-stack.yaml" ]; then
-        rm "$PROJECT_ROOT/generated-swarm-stack.yaml"
-        files_removed=$((files_removed + 1))
-        echo "   Removed: generated-swarm-stack.yaml"
-    fi
-
-    if [ -f "$PROJECT_ROOT/.domains" ]; then
-        rm "$PROJECT_ROOT/.domains"
-        files_removed=$((files_removed + 1))
-        echo "   Removed: .domains"
-    fi
-
-    # Preserve .enabled-services as it might be user data
-    if [ -f "$PROJECT_ROOT/.enabled-services" ]; then
-        echo "   Preserved: .enabled-services (user data)"
-    fi
-
-    echo "✅ Cleaned up $files_removed legacy generated files"
-    echo "💡 User data files (.enabled-services) were preserved"
-
-    return 0
-}
 
 # Note: Functions are available when script is sourced
