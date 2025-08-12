@@ -118,12 +118,12 @@ jobs:
       - name: Run tests
         run: task test
 
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v3
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-report
-          path: coverage/merged/
+          name: code-coverage-report
+          path: coverage/merged/index.html
 
   release:
     name: Semantic Release
