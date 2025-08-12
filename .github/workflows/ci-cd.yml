@@ -107,11 +107,23 @@ jobs:
           sudo wget -qO /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/v4.35.2/yq_linux_amd64"
           sudo chmod +x /usr/local/bin/yq
 
+      - name: Install kcov
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y kcov
+
       - name: Install dependencies
         run: task install
 
       - name: Run tests
         run: task test
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/merged/
 
   release:
     name: Semantic Release
