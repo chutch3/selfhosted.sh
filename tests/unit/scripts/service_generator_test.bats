@@ -3,6 +3,7 @@
 setup() {
     # Load test helper functions
     load ../scripts/test_helper
+    load ../../helpers/homelab_builder
 
     # Create temporary test directory
     TEST_TEMP_DIR="$(temp_make)"
@@ -12,32 +13,9 @@ setup() {
     export PROJECT_ROOT="$TEST_TEMP_DIR"
     export BASE_DOMAIN="test.example.com"
 
-    # Create minimal services config for testing
-    mkdir -p "$TEST_TEMP_DIR/config"
-    cat > "$TEST_TEMP_DIR/config/services.yaml" <<EOF
-version: "1.0"
-services:
-  actual:
-    name: "Actual Budget"
-    description: "Personal finance application"
-    category: finance
-    domain: "budget"
-    port: 5006
-    compose:
-      image: "actualbudget/actual-server:latest"
-      ports:
-        - "5006:5006"
-      environment:
-        - "DEBUG=actual:config"
-      volumes:
-        - "/data:/app/data"
-    nginx:
-      upstream: "actual:5006"
-      additional_config: |
-        location / {
-            proxy_pass http://actual:5006;
-        }
-EOF
+    # Create homelab.yaml config for testing
+    TEST_HOMELAB_CONFIG="${TEST_TEMP_DIR}/homelab.yaml"
+    create_homelab_with_services "$TEST_HOMELAB_CONFIG" "actual" "nginx"
 
     # Change to test directory
     cd "$TEST_TEMP_DIR" || return
