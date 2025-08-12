@@ -405,7 +405,7 @@ main() {
 
     case "$command" in
         init-cluster)
-            initialize_swarm_cluster "$@"
+            initialize_swarm_cluster "${HOMELAB_CONFIG:-homelab.yaml}"
             ;;
         join-workers)
             if [[ ! -f "${SWARM_TOKEN_FILE:-$PWD/.swarm_token}" ]]; then
