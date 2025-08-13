@@ -128,12 +128,18 @@ jobs:
       - name: Run tests
         run: task test
 
-      - name: Archive code coverage results
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Code Coverage Report
+        uses: irongut/CodeCoverageSummary@v1.3.0
         with:
-          name: code-coverage-report
-          path: coverage/merged/index.html
+          filename: coverage/**/index.html
+          badge: true
+          fail_below_min: true
+          format: markdown
+          hide_branch_rate: false
+          hide_complexity: true
+          indicators: true
+          output: both
+          thresholds: '60 80'
 
   release:
     name: Semantic Release
