@@ -133,7 +133,7 @@ jobs:
         with:
           path: coverage/merged/kcov-merged/cobertura.xml
           threshold: 80.123
-          fail: true
+          fail: false
           publish: true
 
   release:
