@@ -112,7 +112,7 @@ version: "2.0"
 deployment: docker_compose
 
 environment:
-  BASE_DOMAIN: test.local
+  BASE_DOMAIN: homelab.local
   PROJECT_ROOT: /tmp/test
 
 machines:
@@ -136,17 +136,43 @@ services:
     deploy: all
     enabled: true
 
-  actual:
-    image: actualbudget/actual-server:latest
-    port: 5006
-    deploy: driver
-    enabled: true
-
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
     port: 3000
+    deploy: driver
+    enabled: true
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    port: 8096
+    deploy: all
+    enabled: true
+
+  static-site:
+    image: nginx:alpine
+    port: 8080
     deploy: node-01
     enabled: true
+
+  secure-app:
+    image: secure-app:latest
+    port: 3000
+    deploy: node-01
+    enabled: true
+
+  postgres:
+    image: postgres:15
+    port: 5432
+    deploy: node-02
+    enabled: true
+    web: false
+
+  redis:
+    image: redis:alpine
+    port: 6379
+    deploy: node-02
+    enabled: true
+    web: false
 EOF
 }
 
@@ -158,9 +184,10 @@ version: "2.0"
 deployment: docker_swarm
 
 environment:
-  BASE_DOMAIN: test.local
+  BASE_DOMAIN: homelab.local
   PROJECT_ROOT: /tmp/test
   SWARM_STACK_NAME: homelab
+  SSL_ENABLED: true
 
 machines:
   driver:
@@ -177,13 +204,31 @@ machines:
       - storage=hdd
 
 services:
-  nginx:
+  reverseproxy:
+    name: "Reverse Proxy"
     image: nginx:alpine
     ports: [80, 443]
     deploy: all
     enabled: true
+    overrides:
+      docker_swarm:
+        replicas: 1
+        placement:
+          constraints:
+            - node.role == manager
+
+  nginx:
+    name: "Nginx"
+    image: nginx:alpine
+    ports: [80, 443]
+    deploy: all
+    enabled: true
+    overrides:
+      docker_swarm:
+        replicas: 1
 
   web_app:
+    name: "Web Application"
     image: nginx:alpine
     port: 8080
     deploy: any
@@ -194,6 +239,26 @@ services:
         placement:
           constraints:
             - node.role == worker
+
+  homepage:
+    name: "Homepage"
+    image: ghcr.io/gethomepage/homepage:latest
+    port: 3000
+    deploy: driver
+    enabled: true
+    overrides:
+      docker_swarm:
+        replicas: 1
+
+  jellyfin:
+    name: "Jellyfin Media Server"
+    image: jellyfin/jellyfin:latest
+    port: 8096
+    deploy: all
+    enabled: true
+    overrides:
+      docker_swarm:
+        replicas: 1
 EOF
 }
 

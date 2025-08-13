@@ -18,8 +18,8 @@ setup() {
     mkdir -p "${TEST_TEMP_DIR}/config"
     mkdir -p "${TEST_TEMP_DIR}/config/services/reverseproxy/templates/conf.d/enabled"
 
-    # Copy the real homelab.yaml for testing
-    cp "${BATS_TEST_DIRNAME}/../../../homelab.yaml" "${HOMELAB_CONFIG}"
+    # Create test homelab.yaml with services
+    create_homelab_with_services "$HOMELAB_CONFIG" "actual" "homepage"
 }
 
 teardown() {

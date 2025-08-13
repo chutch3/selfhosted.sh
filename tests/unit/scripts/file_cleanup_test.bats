@@ -63,9 +63,9 @@ teardown() {
     sed '/cryptpad:/,/nginx:/{
         /nginx:/a\
       template_file: "cryptpad.template"
-    }' "${SERVICES_CONFIG}" > "${temp_services}"
+    }' "${HOMELAB_CONFIG}" > "${temp_services}"
 
-    export SERVICES_CONFIG="${temp_services}"
+    export HOMELAB_CONFIG="${temp_services}"
 
     # Source the service generator script
     # shellcheck source=/dev/null

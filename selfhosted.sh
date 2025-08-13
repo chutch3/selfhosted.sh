@@ -430,7 +430,7 @@ service_generate_consolidated() {
 # Function: service_validate
 # Description: Validates the services configuration
 service_validate() {
-    if ! validate_services_config; then
+    if ! validate_HOMELAB_CONFIG; then
         exit 1
     fi
 }

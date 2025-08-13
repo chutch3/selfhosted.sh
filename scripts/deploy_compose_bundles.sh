@@ -18,7 +18,7 @@ source "$SCRIPT_DIR/translate_homelab_to_compose.sh"
 
 # Default configuration
 HOMELAB_CONFIG="${HOMELAB_CONFIG:-$PROJECT_ROOT/homelab.yaml}"
-BUNDLES_DIR="${BUNDLES_DIR:-$PROJECT_ROOT/generated/docker-compose}"
+BUNDLES_DIR="${BUNDLES_DIR:-$PROJECT_ROOT/bundles}"
 REMOTE_DEPLOY_PATH="${REMOTE_DEPLOY_PATH:-/opt/homelab}"
 
 # Logging functions
