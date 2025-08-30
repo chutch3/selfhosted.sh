@@ -1,62 +1,36 @@
 #!/bin/bash
 
-# Docker Swarm Cluster Management - Minimal Implementation
-# Part of Issue #39 - Docker Swarm Cluster Management
-# TDD GREEN phase - minimal code to make tests pass
+# Get the actual script directory, handling both direct execution and sourcing
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+export PROJECT_ROOT
 
-# Function: validate_homelab_config
-# Description: Validates homelab.yaml configuration for Swarm deployment
-# Arguments: $1 - config file path
-# Returns: 0 on success, 1 on failure
-validate_homelab_config() {
-    local config_file="${1:-homelab.yaml}"
+# Source the docker wrapper functions
+source "$SCRIPT_DIR/wrappers/docker_wrapper.sh"
+source "$SCRIPT_DIR/ssh.sh"
+source "$SCRIPT_DIR/machines.sh"
 
-    if [[ ! -f "$config_file" ]]; then
-        echo "Configuration file not found: $config_file" >&2
-        return 1
-    fi
+# check if docker is installed and running
+if ! command -v docker &> /dev/null; then
+  echo "Error: docker could not be found"
+  exit 1
+fi
 
-    # Check deployment type
-    if grep -q "deployment:.*docker_swarm" "$config_file"; then
-        # Check machines section exists
-        if grep -q "^machines:" "$config_file"; then
-            return 0
-        else
-            echo "Configuration must have machines section for Swarm deployment" >&2
-            return 1
-        fi
-    else
-        echo "Configuration must have deployment: docker_swarm" >&2
-        return 1
-    fi
-}
+if ! docker info &> /dev/null; then
+  echo "Error: docker is not running"
+  exit 1
+fi
+
 
 # Function: get_manager_machine
 # Description: Get the manager machine from configuration
 # Arguments: $1 - config file path
 # Returns: manager machine name
 get_manager_machine() {
-    local config_file="${1:-homelab.yaml}"
+    local config_file="${1:-machines.yaml}"
 
-    # Look for explicitly defined manager role
-    local manager
-    # Find machine that has "role: manager" by looking at the context around it
-    manager=$(awk '
-        /^  [a-zA-Z]/ { current_machine = $1; gsub(/:/, "", current_machine) }
-        /role: manager/ { print current_machine; exit }
-    ' "$config_file")
-
-    # If no explicit manager, use 'driver' as default
-    if [[ -z "$manager" ]]; then
-        if grep -A 5 "^machines:" "$config_file" | grep -q "^  driver:"; then
-            manager="driver"
-        else
-            # Use first machine as manager
-            manager=$(grep -A 20 "^machines:" "$config_file" | grep "^  [a-zA-Z]" | head -1 | cut -d: -f1 | tr -d ' ')
-        fi
-    fi
-
-    echo "$manager"
+    # Find the machine with manager role
+    MACHINES_FILE="$config_file" machines_parse manager
 }
 
 # Function: get_worker_machines
@@ -64,15 +38,15 @@ get_manager_machine() {
 # Arguments: $1 - config file path
 # Returns: space-separated list of worker machine names
 get_worker_machines() {
-    local config_file="${1:-homelab.yaml}"
-    local manager
-    manager=$(get_manager_machine "$config_file")
+    local config_file="${1:-machines.yaml}"
 
-    # Get all machines except manager
-    local workers
-    workers=$(grep -A 20 "^machines:" "$config_file" | grep "^  [a-zA-Z]" | cut -d: -f1 | tr -d ' ' | grep -v "^$manager$" | tr '\n' ' ')
-
-    echo "$workers"
+    # Get all machines and exclude the manager (first machine)
+    local machine_keys
+    machine_keys="$(MACHINES_FILE="$config_file" machines_parse all)"
+    # Convert to array and skip first element (manager)
+    local -a machines_array
+    read -ra machines_array <<< "$machine_keys"
+    printf '%s ' "${machines_array[@]:1}"
 }
 
 # Function: get_machine_host
@@ -81,13 +55,12 @@ get_worker_machines() {
 # Returns: host address
 get_machine_host() {
     local machine="$1"
-    local config_file="${2:-homelab.yaml}"
+    local config_file="${2:-machines.yaml}"
 
-    local host
-    host=$(grep -A 5 "^  $machine:" "$config_file" | grep "host:" | head -1 | cut -d: -f2- | tr -d ' "')
-
-    echo "$host"
+    # Use machines_get_ip from machines.sh for IP-first resolution
+    MACHINES_FILE="$config_file" machines_get_ip "$machine"
 }
+
 
 # Function: get_machine_user
 # Description: Get SSH user for a machine
@@ -97,10 +70,8 @@ get_machine_user() {
     local machine="$1"
     local config_file="${2:-homelab.yaml}"
 
-    local user
-    user=$(grep -A 5 "^  $machine:" "$config_file" | grep "user:" | head -1 | cut -d: -f2- | tr -d ' "')
-
-    echo "$user"
+    # Use machines_get_ssh_user from machines.sh
+    MACHINES_FILE="$config_file" machines_get_ssh_user "$machine"
 }
 
 # Function: get_machine_labels
@@ -109,15 +80,20 @@ get_machine_user() {
 # Returns: space-separated list of labels
 get_machine_labels() {
     local machine="$1"
-    local config_file="${2:-homelab.yaml}"
+    local config_file="${2:-machines.yaml}"
 
-    # Extract labels from YAML (simplified parsing)
+    # Use awk parsing for both array and key-value formats
     local labels
     labels=$(awk "
         /^  $machine:/ { in_machine=1; next }
         in_machine && /^  [a-zA-Z]/ { in_machine=0; in_labels=0 }
         in_machine && /^    labels:/ { in_labels=1; next }
         in_machine && in_labels && /^      - / { gsub(/^      - /, \"\"); print }
+        in_machine && in_labels && /^      [a-zA-Z_-]/ {
+            gsub(/^      /, \"\");
+            gsub(/: /, \"=\");
+            print
+        }
         in_machine && in_labels && /^    [a-zA-Z]/ && !/^    labels:/ { in_labels=0 }
     " "$config_file" | tr '\n' ' ')
 
@@ -129,12 +105,7 @@ get_machine_labels() {
 # Arguments: $1 - config file path (optional)
 # Returns: 0 on success, 1 on failure
 initialize_swarm_cluster() {
-    local config_file="${1:-homelab.yaml}"
-
-    # Validate configuration first
-    if ! validate_homelab_config "$config_file"; then
-        return 1
-    fi
+    local config_file="${1:-machines.yaml}"
 
     echo "Initializing Docker Swarm cluster..." >&2
 
@@ -146,14 +117,20 @@ initialize_swarm_cluster() {
     local manager_user
     manager_user=$(get_machine_user "$manager_machine" "$config_file")
 
+    local my_ip
+    my_ip=$(machines_my_ip)
+
+    local manager_ip
+    manager_ip="$manager_host"
+
     echo "Initializing Swarm on manager: $manager_user@$manager_host ($manager_machine)" >&2
 
     # Initialize Swarm on manager node
     local join_token
-    if [[ "$manager_host" == "localhost" || "$manager_host" == "127.0.0.1" ]]; then
+    if [[ "$my_ip" == "$manager_ip" ]]; then
         # Local manager initialization - call mock functions if they exist
         if command -v docker_swarm_init >/dev/null 2>&1; then
-            docker_swarm_init "$manager_host"
+            docker_swarm_init "$my_ip"
             join_token=$(docker_swarm_get_worker_token)
         else
             echo "Mock: docker swarm init --advertise-addr $manager_host" >&2
@@ -239,11 +216,11 @@ join_worker_nodes() {
 # Arguments: $1 - config file path
 # Returns: 0 on success, 1 on failure
 label_swarm_nodes() {
-    local config_file="${1:-homelab.yaml}"
+    local config_file="${1:-machines.yaml}"
 
     echo "Labeling Swarm nodes..." >&2
 
-    # Get all machines
+    # Get all machines from config
     local all_machines
     all_machines="$(get_manager_machine "$config_file") $(get_worker_machines "$config_file")"
 
@@ -254,7 +231,38 @@ label_swarm_nodes() {
 
         echo "Labeling node: $machine" >&2
 
-        # Apply machine type and role labels
+        # Find the actual Docker node hostname for this machine
+        # Use machine ID as the primary identifier
+        local docker_node_name
+        if command -v docker_node_ls >/dev/null 2>&1; then
+            # In testing, use mocked node name
+            docker_node_name=$(docker_node_ls)
+        else
+            # In production, find node by existing machine.id label or hostname
+            local nodes
+            nodes=$(docker node ls --format "{{.Hostname}}")
+
+            # Try to find by existing machine.id label first
+            docker_node_name=$(docker node ls --filter "label=machine.id=$machine" --format "{{.Hostname}}" | head -1)
+
+            # If not found by label, try direct hostname matching
+            if [[ -z "$docker_node_name" ]]; then
+                docker_node_name=$(echo "$nodes" | grep -x "$machine" | head -1)
+            fi
+
+            # If still not found, use first available node as fallback
+            if [[ -z "$docker_node_name" ]]; then
+                docker_node_name=$(echo "$nodes" | head -1)
+                echo "Warning: Could not map machine '$machine' to specific node, using '$docker_node_name'" >&2
+            fi
+        fi
+
+        if [[ -z "$docker_node_name" ]]; then
+            echo "Error: No Docker node found for machine '$machine'" >&2
+            continue
+        fi
+
+        # Determine role
         local role
         if [[ "$machine" == "$(get_manager_machine "$config_file")" ]]; then
             role="manager"
@@ -262,30 +270,31 @@ label_swarm_nodes() {
             role="worker"
         fi
 
+        # Apply machine ID label (KEY CHANGE: This enables future lookups)
         if command -v docker_node_update_label >/dev/null 2>&1; then
-            docker_node_update_label "--label-add" "machine.type=$machine" "$machine"
-            docker_node_update_label "--label-add" "machine.role=$role" "$machine"
+            docker_node_update_label "--label-add" "machine.id=$machine" "$docker_node_name"
+            docker_node_update_label "--label-add" "machine.role=$role" "$docker_node_name"
         else
-            echo "Mock: docker node update --label-add machine.type=$machine $machine" >&2
-            echo "Mock: docker node update --label-add machine.role=$role $machine" >&2
+            echo "Mock: docker node update --label-add machine.id=$machine $docker_node_name" >&2
+            echo "Mock: docker node update --label-add machine.role=$role $docker_node_name" >&2
         fi
 
-        # Apply custom labels
+        # Apply custom labels from machines.yaml
         local labels
         labels=$(get_machine_labels "$machine" "$config_file")
 
         for label in $labels; do
             if [[ -n "$label" ]]; then
                 if command -v docker_node_update_label >/dev/null 2>&1; then
-                    docker_node_update_label "--label-add" "$label" "$machine"
+                    docker_node_update_label "--label-add" "$label" "$docker_node_name"
                 else
-                    echo "Mock: docker node update --label-add $label $machine" >&2
+                    echo "Mock: docker node update --label-add $label $docker_node_name" >&2
                 fi
                 echo "Applied label '$label' to $machine" >&2
             fi
         done
 
-        echo "Node $machine labeled successfully" >&2
+        echo "Node $docker_node_name labeled successfully" >&2
     done
 
     return 0
