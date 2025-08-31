@@ -421,45 +421,6 @@ EOF
 # Integration Tests (More Complex)
 # ================================
 
-@test "cluster initialization handles multi-node configuration" {
-    # This test should initially fail (RED phase)
-    skip "Not implemented yet - part of TDD cycle"
-}
-
-@test "node labeling supports custom constraint labels" {
-    # This test should initially fail (RED phase)
-    skip "Not implemented yet - part of TDD cycle"
-}
-
-@test "cluster monitoring detects unhealthy nodes" {
-    # This test should initially fail (RED phase)
-    skip "Not implemented yet - part of TDD cycle"
-}
-
-@test "service deployment uses placement constraints" {
-    # This test should initially fail (RED phase)
-    skip "Not implemented yet - part of TDD cycle"
-}
-
-@test "overlay network management creates networks" {
-    # This test should initially fail (RED phase)
-    skip "Not implemented yet - part of TDD cycle"
-}
-
-@test "secret management creates and distributes secrets" {
-    # This test should initially fail (RED phase)
-    skip "Not implemented yet - part of TDD cycle"
-}
-
-@test "rolling updates perform zero-downtime deployments" {
-    # This test should initially fail (RED phase)
-    skip "Not implemented yet - part of TDD cycle"
-}
-
-@test "service scaling adjusts replica counts" {
-    # This test should initially fail (RED phase)
-    skip "Not implemented yet - part of TDD cycle"
-}
 
 @test "swarm_cluster_manager uses machines_get_ip for IP-first resolution" {
     # Verify that swarm_cluster_manager.sh contains the IP-first function call

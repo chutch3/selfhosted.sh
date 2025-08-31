@@ -568,3 +568,24 @@ EOF
     [[ ! "$output" =~ "worker1.example.com" ]]
     [[ ! "$output" =~ "worker2.example.com" ]]
 }
+
+@test "machines_get_ip can find machine by role" {
+    # Create a machines.yaml where the manager is not keyed by "manager"
+    cat > "${PROJECT_ROOT}/machines.yaml" <<EOF
+machines:
+  main-server:
+    ip: 10.0.0.99
+    role: manager
+  worker-bee:
+    ip: 10.0.0.2
+    role: worker
+EOF
+
+    MACHINES_FILE="${PROJECT_ROOT}/machines.yaml"
+
+    # This should fail because machines_get_ip looks for a key "manager"
+    # instead of looking for a machine with the role "manager".
+    run machines_get_ip "manager"
+    [ "$status" -eq 0 ]
+    [ "$output" = "10.0.0.99" ]
+}

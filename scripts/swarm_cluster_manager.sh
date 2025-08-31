@@ -6,8 +6,11 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 export PROJECT_ROOT
 
 # Source the docker wrapper functions
+# shellcheck source=scripts/wrappers/docker_wrapper.sh
 source "$SCRIPT_DIR/wrappers/docker_wrapper.sh"
+# shellcheck source=scripts/ssh.sh
 source "$SCRIPT_DIR/ssh.sh"
+# shellcheck source=scripts/machines.sh
 source "$SCRIPT_DIR/machines.sh"
 
 # check if docker is installed and running

@@ -10,6 +10,7 @@ setup() {
     export BASE_DOMAIN="diyhub.dev"
     export DNS_ADMIN_PASSWORD="test123"
     export DNS_SERVER_IP="192.168.1.100"
+    export DNS_SERVER_URL="http://localhost:5380" # Add this for consistency
 
     # Create test machines.yaml with simplified structure
     cat > "${TEST_TEMP_DIR}/machines.yaml" <<EOF
@@ -123,4 +124,43 @@ mock_curl() {
     [[ "$output" == *"dns"* ]]
     [[ "$output" == *"actual"* ]]
     [[ "$output" == *"homeassistant"* ]]
+}
+
+@test "get_dns_token urlencodes passwords correctly" {
+    export DNS_ADMIN_PASSWORD="foo#bar&baz=qux"
+    local curl_log="${TEST_TEMP_DIR}/curl.log"
+
+    # Mock curl to capture the data payload to a file
+    curl() {
+        printf "%s\n" "$@" > "$curl_log"
+        echo '{"token":"mock-token-12345"}'
+    }
+    export -f curl
+
+    run get_dns_token
+
+    [ "$status" -eq 0 ]
+
+    echo "---BEGIN curl.log---"
+    cat "$curl_log"
+    echo "---END curl.log---"
+
+    # Read the arguments from the file
+    local args=()
+    while IFS= read -r line; do
+        args+=("$line")
+    done < "$curl_log"
+
+    # Find the -d argument
+    local data_payload=""
+    for i in "${!args[@]}"; do
+        if [[ "${args[$i]}" == "-d" ]]; then
+            data_payload="${args[$i+1]}"
+            break
+        fi
+    done
+
+    echo "data_payload: $data_payload"
+
+    [ "$data_payload" = "user=admin&pass=foo%23bar%26baz%3Dqux" ]
 }

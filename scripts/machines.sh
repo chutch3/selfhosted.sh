@@ -2,6 +2,7 @@
 
 # Get the actual script directory, handling both direct execution and sourcing
 MACHINES_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/ssh.sh
 source "$MACHINES_SCRIPT_DIR/ssh.sh"
 
 
@@ -60,11 +61,11 @@ machines_get_ssh_user() {
 
     local user
     # Use machine key to get ssh_user directly from the new structure
-    user=$(yq ".machines[\"$machine_key\"].ssh_user" "$machines_file" 2>/dev/null | tr -d '"')
+    user=$(yq ".machines[\"$machine_key\"] .ssh_user" "$machines_file" 2>/dev/null | tr -d '"')
 
     # Fallback to .user for backward compatibility
     if [ -z "$user" ] || [ "$user" = "null" ]; then
-        user=$(yq ".machines[\"$machine_key\"].user" "$machines_file" 2>/dev/null | tr -d '"')
+        user=$(yq ".machines[\"$machine_key\"] .user" "$machines_file" 2>/dev/null | tr -d '"')
     fi
 
     # Handle case where machine key isn't found or user is not set
@@ -181,14 +182,21 @@ machines_get_ip() {
         return 1
     fi
 
-    # Check if input looks like a machine key (no dots) vs hostname (has dots)
-    local machine_key
-    if [[ "$input" =~ \. ]]; then
-        # Input is a hostname, extract machine key from it
-                machine_key="${input%%\."${BASE_DOMAIN:-}"*}"
-    else
-        # Input is already a machine key
-        machine_key="$input"
+    local machine_key=""
+
+    # First, try to find a machine by role if the input is "manager" or "workers"
+    if [ "$input" = "manager" ] || [ "$input" = "workers" ]; then
+        machine_key=$(machines_parse "$input")
+    fi
+
+    # If we didn't find a machine by role, or the input was not a role,
+    # treat the input as a key.
+    if [ -z "$machine_key" ]; then
+        if [[ "$input" =~ \. ]]; then
+            machine_key="${input%%\."${BASE_DOMAIN:-}"*}"
+        else
+            machine_key="$input"
+        fi
     fi
 
     # Try to get IP from machines.yaml IP field using machine key
@@ -293,7 +301,7 @@ machines_setup_ssh() {
         fi
 
         local ssh_user
-        ssh_user=$(machines_get_ssh_user "$machine_key")
+        ssh_user="$(machines_get_ssh_user "$machine_key")"
         if [ "$ssh_user" = "null" ]; then
             ssh_user=${USER}
             echo "No SSH user specified for $machine_key, using current user: $ssh_user"

@@ -1,10 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-
 # --- Configuration ---
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-}")" && pwd)
-PROJECT_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd -- "$SCRIPT_DIR/.." && pwd)}
 STACKS_DIR="$PROJECT_ROOT/stacks"
 APPS_DIR="$STACKS_DIR/apps"
 REVERSE_PROXY_DIR="$STACKS_DIR/reverse-proxy"
@@ -12,6 +11,13 @@ MONITORING_DIR="$STACKS_DIR/monitoring"
 DNS_DIR="$STACKS_DIR/dns"
 NETWORK_NAME="traefik-public"
 MACHINES_FILE="$PROJECT_ROOT/machines.yaml"
+
+
+# --- Dependencies ---
+if [ -z "${TEST:-}" ]; then
+  # shellcheck source=scripts/ssh.sh
+  source "${SCRIPT_DIR}/ssh.sh"
+fi
 
 # --- Colors and Logging ---
 COLOR_RESET='\033[0m'
@@ -127,7 +133,7 @@ nuke_cluster() {
       project_name=$(basename "$(dirname "$compose_file")")
       # Extract volume names from the compose file
       local volumes
-      volumes=$(yq '(.volumes // {}) | keys | .[]' "$compose_file")
+      volumes=$(yq '(.volumes // {}) | keys | .[]' "$compose_file" | tr -d '"')
       for vol in $volumes; do
         # Docker compose prepends the project name to the volume name
         homelab_volumes+=("${project_name}_${vol}")
@@ -165,15 +171,15 @@ nuke_cluster() {
       else
         # Remote machine - use SSH
         # First, check if the node is even reachable
-        if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$node" "exit 0" &>/dev/null; then
+        if ! ssh_execute "$node" "exit 0" &>/dev/null; then
             log_warn "    - Could not connect to node $node. Skipping."
             continue # Skip to the next node
         fi
 
         for vol in "${homelab_volumes[@]}"; do
-          if ssh "$node" bash -c "docker volume inspect \"$vol\" &>/dev/null" -- "$vol"; then
+          if ssh_execute "$node" "docker volume inspect $vol &>/dev/null"; then
             log "    - Removing volume $vol from $node"
-            ssh "$node" bash -c "docker volume rm --force \"$vol\"" -- "$vol" || true
+            ssh_execute "$node" "docker volume rm --force $vol" || true
           fi
         done
       fi
@@ -205,6 +211,7 @@ nuke_cluster() {
 }
 
 _remove_service_volumes() {
+  echo "APPS_DIR is: $APPS_DIR" >&2
   local stack_name="$1"
   local compose_file=""
 
@@ -226,7 +233,7 @@ _remove_service_volumes() {
   local homelab_volumes=()
   local project_name="$stack_name"
   local volumes
-  volumes=$(yq '(.volumes // {}) | keys | .[]' "$compose_file")
+  volumes=$(yq '(.volumes // {}) | keys | .[]' "$compose_file" | tr -d '"')
 
   if [ -z "$volumes" ]; then
     log "No named volumes found in $compose_file."
@@ -250,15 +257,15 @@ _remove_service_volumes() {
 
   for node in "${nodes[@]}"; do
     log "  - Checking node: ${COLOR_YELLOW}$node${COLOR_RESET}"
-    if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$node" "exit 0" &>/dev/null; then
+    if ! ssh_execute "$node" "exit 0" &>/dev/null; then
         log_warn "    - Could not connect to node $node. Skipping volume removal on this node."
         continue
     fi
 
     for vol in "${homelab_volumes[@]}"; do
-      if ssh "$node" bash -c "docker volume inspect \"$vol\" &>/dev/null" -- "$vol"; then
+      if ssh_execute "$node" "docker volume inspect $vol &>/dev/null"; then
         log "    - Removing volume $vol from $node"
-        ssh "$node" bash -c "docker volume rm --force \"$vol\"" -- "$vol" || true
+        ssh_execute "$node" "docker volume rm --force $vol"
       else
         log "    - Volume $vol not found on $node, skipping."
       fi
@@ -726,4 +733,6 @@ main() {
   esac
 }
 
-main "$@"
+if [ "${BASH_SOURCE[0]}" -ef "$0" ]; then
+    main "$@"
+fi

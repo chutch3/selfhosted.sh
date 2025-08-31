@@ -9,6 +9,7 @@ PROJECT_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
 STACKS_DIR="$PROJECT_ROOT/stacks"
 
 # Source required scripts
+# shellcheck source=scripts/machines.sh
 source "$SCRIPT_DIR/machines.sh"
 
 # Colors
@@ -32,16 +33,14 @@ log_error() {
 # DNS Server configuration (will be set dynamically based on driver IP)
 DNS_SERVER_URL=""
 DNS_ADMIN_USER="admin"
-DNS_ADMIN_PASS="${DNS_ADMIN_PASSWORD:-admin}"
-
-# Get DNS authentication token from Technitium DNS API
 get_dns_token() {
+    local DNS_ADMIN_PASS="${DNS_ADMIN_PASSWORD:-admin}"
     local response
     local curl_exit_code
 
     # Use timeout to prevent hanging - URL encode password for special characters
     local encoded_pass
-    encoded_pass=$(printf '%s' "$DNS_ADMIN_PASS" | sed 's/#/%23/g; s/&/%26/g; s/=/%3D/g')
+    encoded_pass=$(echo -n "$DNS_ADMIN_PASS" | jq -s -R -r @uri)
 
     response=$(curl -s --max-time 10 -X POST "${DNS_SERVER_URL}/api/user/login" \
         -H "Content-Type: application/x-www-form-urlencoded" \
