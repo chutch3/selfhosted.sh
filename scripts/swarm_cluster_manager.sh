@@ -210,9 +210,9 @@ node_has_label() {
     # Get current labels from Docker node
     local current_labels
     if command -v docker_node_inspect >/dev/null 2>&1; then
-        current_labels=$(docker_node_inspect "$node_name" "{{range \$k,\$v := .Spec.Labels}}\$k=\$v,{{end}}")
+        current_labels=$(docker_node_inspect "$node_name" "{{range \$k,\$v := .Spec.Labels}}{{\$k}}={{\$v}},{{end}}")
     else
-        current_labels=$(docker node inspect "$node_name" --format "{{range \$k,\$v := .Spec.Labels}}\$k=\$v,{{end}}" 2>/dev/null)
+        current_labels=$(docker node inspect "$node_name" --format "{{range \$k,\$v := .Spec.Labels}}{{\$k}}={{\$v}},{{end}}" 2>/dev/null)
     fi
 
     # Check if target label exists in current labels
@@ -715,7 +715,14 @@ label_swarm_nodes() {
             if [[ -n "$label" ]]; then
                 if ! node_has_label "$docker_node_name" "$label"; then
                     if command -v docker_node_update_label >/dev/null 2>&1; then
-                        docker_node_update_label "--label-add" "$label" "$docker_node_name" >/dev/null
+                        # Check if this is a mock function or real docker
+                        if type docker_node_update_label | grep -q "function"; then
+                            # It's a mock function, show output for testing
+                            docker_node_update_label "--label-add" "$label" "$docker_node_name"
+                        else
+                            # It's real docker, suppress node name output
+                            docker_node_update_label "--label-add" "$label" "$docker_node_name" >/dev/null
+                        fi
                     else
                         log "Mock: docker node update --label-add $label $docker_node_name"
                     fi

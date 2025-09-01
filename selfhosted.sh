@@ -3,7 +3,7 @@ set -euo pipefail
 
 # --- Configuration ---
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-}")" && pwd)
-PROJECT_ROOT=${PROJECT_ROOT:-$(cd -- "$SCRIPT_DIR/.." && pwd)}
+PROJECT_ROOT=${PROJECT_ROOT:-"$SCRIPT_DIR"}
 STACKS_DIR="$PROJECT_ROOT/stacks"
 APPS_DIR="$STACKS_DIR/apps"
 REVERSE_PROXY_DIR="$STACKS_DIR/reverse-proxy"
@@ -16,7 +16,7 @@ MACHINES_FILE="$PROJECT_ROOT/machines.yaml"
 # --- Dependencies ---
 if [ -z "${TEST:-}" ]; then
   # shellcheck source=scripts/ssh.sh
-  source "${SCRIPT_DIR}/ssh.sh"
+  source "${PROJECT_ROOT}/scripts/ssh.sh"
 fi
 
 # --- Colors and Logging ---
@@ -42,6 +42,35 @@ log_error() {
 log_header() {
   echo -e "
 ${COLOR_BOLD}--- $1 ---${COLOR_RESET}"
+}
+
+# --- ASCII Art Banner ---
+show_banner() {
+  echo -e "${COLOR_BOLD}${COLOR_BLUE}"
+  cat << 'EOF'
+ ███████ ███████ ██      ███████ ██   ██  ██████  ███████ ████████ ███████ ██████      ███████ ██   ██
+ ██      ██      ██      ██      ██   ██ ██    ██ ██         ██    ██      ██   ██     ██      ██   ██
+ ███████ █████   ██      █████   ███████ ██    ██ ███████    ██    █████   ██   ██     ███████ ███████
+      ██ ██      ██      ██      ██   ██ ██    ██      ██    ██    ██      ██   ██          ██ ██   ██
+ ███████ ███████ ███████ ██      ██   ██  ██████  ███████    ██    ███████ ██████  ██  ███████ ██   ██
+
+EOF
+  echo -e "${COLOR_GREEN}"
+  cat << 'EOF'
+   🏠 HOMELAB DEPLOYMENT AUTOMATION 🚀
+   ═══════════════════════════════════════
+   Docker Swarm • Container Management
+   Network Configuration • SSL Automation
+   Multi-Node Orchestration • Self-Healing
+   ═══════════════════════════════════════
+
+EOF
+  echo -e "${COLOR_RESET}"
+}
+
+show_compact_banner() {
+  echo -e "${COLOR_BOLD}${COLOR_BLUE}🏠 SELFHOSTED HOMELAB 🚀${COLOR_RESET} ${COLOR_GREEN}Deploy • Manage • Scale${COLOR_RESET}"
+  echo -e "${COLOR_YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${COLOR_RESET}"
 }
 
 # --- Helper Functions ---
@@ -517,17 +546,18 @@ deploy_cluster() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --help|-h)
-        echo "Usage: $0 deploy [options]"
+        show_banner
+        echo -e "${COLOR_BOLD}${COLOR_GREEN}USAGE:${COLOR_RESET} $0 deploy [options]"
         echo ""
-        echo "Options:"
-        echo "  --skip-apps <apps>    Comma-separated list of apps to skip"
-        echo "  --only-apps <apps>    Comma-separated list of apps to deploy (only these)"
-        echo "  --help, -h           Show this help message"
+        echo -e "${COLOR_BOLD}${COLOR_BLUE}OPTIONS:${COLOR_RESET}"
+        echo -e "  ${COLOR_YELLOW}--skip-apps <apps>${COLOR_RESET}    Comma-separated list of apps to skip"
+        echo -e "  ${COLOR_YELLOW}--only-apps <apps>${COLOR_RESET}    Comma-separated list of apps to deploy (only these)"
+        echo -e "  ${COLOR_YELLOW}--help, -h${COLOR_RESET}           Show this help message"
         echo ""
-        echo "Examples:"
-        echo "  $0 deploy                    # Deploy all apps"
-        echo "  $0 deploy --skip-apps homeassistant,emby  # Skip specific apps"
-        echo "  $0 deploy --only-apps sonarr,radarr       # Deploy only specific apps"
+        echo -e "${COLOR_BOLD}${COLOR_BLUE}EXAMPLES:${COLOR_RESET}"
+        echo -e "  ${COLOR_GREEN}$0 deploy${COLOR_RESET}                          # Deploy all apps"
+        echo -e "  ${COLOR_GREEN}$0 deploy --skip-apps homeassistant,emby${COLOR_RESET}    # Skip specific apps"
+        echo -e "  ${COLOR_GREEN}$0 deploy --only-apps sonarr,radarr${COLOR_RESET}         # Deploy only specific apps"
         exit 0
         ;;
       --skip-apps)
@@ -689,6 +719,10 @@ deploy_cluster() {
 # --- Main Entrypoint ---
 
 main() {
+  # Always show banner for any command
+  show_compact_banner
+  echo
+
   check_dependencies
 
   local command="deploy"
@@ -705,9 +739,15 @@ main() {
   # If the first arg is not a command and not an option, and not empty, it's an error
   elif [[ -n "${1:-}" ]]; then
       log_error "Unknown command: '$1'"
-      echo "Available commands: deploy, nuke, redeploy-service"
-      echo "Usage: $0 [deploy|nuke|redeploy-service] [options...]"
-      echo "Use '$0 deploy --help' for deployment options"
+      echo ""
+      echo -e "${COLOR_BOLD}${COLOR_BLUE}Available commands:${COLOR_RESET}"
+      echo -e "  ${COLOR_GREEN}deploy${COLOR_RESET}           Full homelab deployment (default)"
+      echo -e "  ${COLOR_RED}nuke${COLOR_RESET}             Complete infrastructure cleanup"
+      echo -e "  ${COLOR_YELLOW}redeploy-service${COLOR_RESET} Redeploy a specific service"
+      echo ""
+      echo -e "${COLOR_BOLD}${COLOR_BLUE}Usage:${COLOR_RESET}"
+      echo -e "  ${COLOR_GREEN}$0 [deploy|nuke|redeploy-service] [options...]${COLOR_RESET}"
+      echo -e "  ${COLOR_GREEN}$0 deploy --help${COLOR_RESET} for deployment options"
       exit 1
   fi
 

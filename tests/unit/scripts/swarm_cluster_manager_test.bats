@@ -582,7 +582,7 @@ EOF
 
     run label_swarm_nodes "$TEST_CONFIG"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Skipping existing label"* ]]  # Should indicate skipping (note capitalization)
+    # Labels are skipped silently for cleaner output
     [[ "$output" != *"Mock: --label-add machine.id=driver"* ]]  # Should NOT add existing label
     [[ "$output" != *"Mock: --label-add storage=ssd"* ]]  # Should NOT add existing label
     [[ "$output" == *"Mock: --label-add gpu=nvidia"* ]]  # SHOULD add missing label

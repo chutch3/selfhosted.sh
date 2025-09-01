@@ -78,7 +78,7 @@ teardown() {
     MACHINES_FILE="/nonexistent/path/machines.yaml"
     run machines_parse 'manager'
     [ "$status" -eq 1 ]
-    [[ "$output" =~ "Error" ]]  # Should have error message
+    [[ "$output" =~ "ERROR" ]]  # Should have error message
 }
 
 @test "machines_parse handles invalid yaml" {
@@ -112,13 +112,13 @@ EOF
 @test "machines_get_host_ip handles invalid IP format" {
     run machines_get_host_ip "256.256.256.256"
     [ "$status" -eq 1 ]
-    [[ "$output" =~ "Error: Invalid IP address" ]]
+    [[ "$output" =~ "Invalid IP address" ]]
 }
 
 @test "machines_get_host_ip fails on unresolvable host" {
     run machines_get_host_ip "nonexistent.example.com"
     [ "$status" -eq 1 ]
-    [[ "$output" =~ "Error: Could not resolve IP for host" ]]
+    [[ "$output" =~ "Could not resolve IP for host" ]]
 }
 
 @test "machines_setup_ssh attempts to setup all hosts" {
@@ -252,7 +252,7 @@ EOF
 
     run machines_get_ssh_user "manager"
     [ "$status" -eq 1 ]
-    [[ "$output" =~ "Error" ]]
+    [[ "$output" =~ "ERROR" ]]
 }
 
 @test "machines_setup_ssh handles permissions" {

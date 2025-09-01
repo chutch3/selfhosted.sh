@@ -72,7 +72,7 @@ machines:
 EOF
 
     # Source the script to access functions
-    source "${BATS_TEST_DIRNAME}/../../../scripts/deploy.new.sh"
+    source "${BATS_TEST_DIRNAME}/../../../selfhosted.sh"
 
     # Mock ssh_execute to log commands to a file
     local ssh_log="${TEST_TEMP_DIR}/ssh_execute.log"

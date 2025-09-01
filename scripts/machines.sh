@@ -5,6 +5,26 @@ MACHINES_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/ssh.sh
 source "$MACHINES_SCRIPT_DIR/ssh.sh"
 
+# --- Colors and Logging ---
+COLOR_RESET='\033[0m'
+COLOR_RED='\033[0;31m'
+COLOR_GREEN='\033[0;32m'
+COLOR_YELLOW='\033[0;33m'
+COLOR_BLUE='\033[0;34m'
+
+log() {
+  echo -e "${COLOR_BLUE}[INFO]${COLOR_RESET} $1"
+}
+log_success() {
+  echo -e "${COLOR_GREEN}[SUCCESS]${COLOR_RESET} $1"
+}
+log_warn() {
+  echo -e "${COLOR_YELLOW}[WARN]${COLOR_RESET} $1"
+}
+log_error() {
+  echo -e "${COLOR_RED}[ERROR]${COLOR_RESET} $1" >&2
+}
+
 
 # Parse machine configuration from YAML file
 # Args:
@@ -14,7 +34,7 @@ source "$MACHINES_SCRIPT_DIR/ssh.sh"
 machines_parse() {
     local machines_file="${MACHINES_FILE:-$PROJECT_ROOT/machines.yaml}"
     if [ ! -f "$machines_file" ]; then
-        echo "Error: Machines file not found at $machines_file" >&2
+        log_error "Machines file not found at $machines_file"
         return 1
     fi
 
@@ -28,7 +48,7 @@ machines_parse() {
     elif [ "$key" = "all" ]; then
         yq_query='.machines | keys | .[]'
     else
-        echo "Error: Invalid key '$key'. Use 'manager', 'workers', or 'all'" >&2
+        log_error "Invalid key '$key'. Use 'manager', 'workers', or 'all'"
         return 1
     fi
 
@@ -36,7 +56,7 @@ machines_parse() {
     local output
     # Check yq exit status
     if ! output=$(yq "$yq_query" "$machines_file" 2>&1); then
-        echo "Error: Invalid YAML in $machines_file" >&2
+        log_error "Invalid YAML in $machines_file"
         echo "$output" >&2
         return 1
     fi
@@ -55,7 +75,7 @@ machines_get_ssh_user() {
     local machines_file="${MACHINES_FILE:-$PROJECT_ROOT/machines.yaml}"
 
     if [ ! -f "$machines_file" ]; then
-        echo "Error: Machines file not found at $machines_file" >&2
+        log_error "Machines file not found at $machines_file"
         return 1
     fi
 
@@ -86,7 +106,7 @@ machines_build_hostname() {
     local machine_key="$1"
 
     if [ -z "$machine_key" ]; then
-        echo "Error: Machine key parameter is required" >&2
+        log_error "Machine key parameter is required"
         return 1
     fi
 
@@ -173,12 +193,12 @@ machines_get_ip() {
 
     # Validate input
     if [ -z "$input" ]; then
-        echo "Error: Machine key or hostname parameter is required" >&2
+        log_error "Machine key or hostname parameter is required"
         return 1
     fi
 
     if [ ! -f "$machines_file" ]; then
-        echo "Error: Machines file not found at $machines_file" >&2
+        log_error "Machines file not found at $machines_file"
         return 1
     fi
 
@@ -202,7 +222,7 @@ machines_get_ip() {
     # Try to get IP from machines.yaml IP field using machine key
     local ip_field
     if ! ip_field=$(yq ".machines[\"${machine_key}\"].ip" "$machines_file" 2>/dev/null | tr -d '"'); then
-        echo "Error: Failed to parse machines.yaml" >&2
+        log_error "Failed to parse machines.yaml"
         return 1
     fi
 
@@ -235,12 +255,19 @@ machines_get_host_ip() {
 
     # Check if host is already an IP address
     if [[ $host =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        # Validate IP address format
-        local IFS='.'
-        read -ra octets <<< "$host"
-        for octet in "${octets[@]}"; do
-            if [ "$octet" -gt 255 ] || [ "$octet" -lt 0 ]; then
-                echo "Error: Invalid IP address format: $host" >&2
+        # Validate IP address format by checking each octet
+        local octet1 octet2 octet3 octet4
+        IFS='.' read -r octet1 octet2 octet3 octet4 <<< "$host"
+
+        for octet in "$octet1" "$octet2" "$octet3" "$octet4"; do
+            # Check if it's a valid number first
+            if ! [[ "$octet" =~ ^[0-9]+$ ]]; then
+                log_error "Invalid IP address format: $host"
+                return 1
+            fi
+            # Check if octet is in valid range (0-255)
+            if [ "$octet" -gt 255 ]; then
+                log_error "Invalid IP address format: $host"
                 return 1
             fi
         done
@@ -253,7 +280,7 @@ machines_get_host_ip() {
     ip=$(getent hosts "$host" | awk '{ print $1 }')
 
     if [ -z "$ip" ]; then
-        echo "Error: Could not resolve IP for host: $host" >&2
+        log_error "Could not resolve IP for host: $host"
         return 1
     fi
 
@@ -274,7 +301,7 @@ machines_setup_ssh() {
     if [ ! -f "$key_file" ]; then
         echo "Generating new SSH key at $key_file..."
         if ! ssh-keygen -t rsa -b 4096 -f "$key_file" -N ""; then
-            echo "Failed to generate SSH key" >&2
+            log_error "Failed to generate SSH key"
             return 1
         fi
     fi
@@ -296,7 +323,7 @@ machines_setup_ssh() {
 
         # Skip if this is the local machine
         if [[ "$machine_ip" == "$current_machine_ip" || "$machine_ip" == "localhost" || "$machine_ip" == "127.0.0.1" ]]; then
-            echo "Skipping SSH setup for local machine: $display_name"
+            log "Skipping SSH setup for local machine: $display_name"
             continue
         fi
 
@@ -304,44 +331,44 @@ machines_setup_ssh() {
         ssh_user="$(machines_get_ssh_user "$machine_key")"
         if [ "$ssh_user" = "null" ]; then
             ssh_user=${USER}
-            echo "No SSH user specified for $machine_key, using current user: $ssh_user"
+            log_warn "No SSH user specified for $machine_key, using current user: $ssh_user"
         fi
 
         # Check if SSH key authentication is already working for this IP
         if machines_is_ssh_configured "$machine_ip" "$ssh_user" "debug"; then
-            echo "Skipping SSH setup for already configured machine: $display_name"
+            log "Skipping SSH setup for already configured machine: $display_name"
             continue
         fi
 
-        echo "Setting up SSH access for $display_name (user: $ssh_user)..."
+        log "Setting up SSH access for $display_name (user: $ssh_user)..."
 
         # Create .ssh directory with correct permissions on remote host
         if ! ssh_password_auth "$ssh_user@$machine_ip" \
             "mkdir -p ~/.ssh && chmod 700 ~/.ssh"; then
-            echo "Failed to create/fix permissions on .ssh directory for $display_name" >&2
+            log_error "Failed to create/fix permissions on .ssh directory for $display_name"
             return 1
         fi
 
         # Copy SSH key and set permissions
         if ! ssh_copy_id "$ssh_user@$machine_ip"; then
-            echo "Failed to copy SSH key to $display_name" >&2
+            log_error "Failed to copy SSH key to $display_name"
             return 1
         fi
 
         # Verify and fix permissions on authorized_keys
         if ! ssh_key_auth "$ssh_user@$machine_ip" \
             "chmod 600 ~/.ssh/authorized_keys"; then
-            echo "Failed to fix permissions on authorized_keys for $display_name" >&2
+            log_error "Failed to fix permissions on authorized_keys for $display_name"
             return 1
         fi
 
         # Test the connection
         if ! ssh_key_auth "$ssh_user@$machine_ip" exit; then
-            echo "Failed to verify SSH key access to $display_name" >&2
+            log_error "Failed to verify SSH key access to $display_name"
             return 1
         fi
 
-        echo "✓ Successfully set up SSH access for $display_name"
+        log_success "✓ Successfully set up SSH access for $display_name"
     done
 
     echo "SSH setup completed successfully for all hosts"
@@ -371,7 +398,7 @@ machines_test_connection() {
         else
             local status=$?
             if [ $status -eq 124 ]; then
-                echo "Connection timed out for $display_name" >&2
+                log_error "Connection timed out for $display_name"
                 return 1
             fi
             echo "✗ Failed to connect to $display_name"
@@ -387,36 +414,44 @@ machines_check_cifs_utils() {
     local machine_keys
 
     machine_keys="$(machines_parse all)"
-    echo "Checking cifs-utils on all machines..."
+    # Removed verbose header message - let calling script handle headers
     for machine_key in $machine_keys; do
         local machine_ip
         machine_ip=$(machines_get_ip "$machine_key")
         local display_name
         display_name=$(machines_format_display "$machine_key" "$machine_ip")
 
-        echo "Checking cifs-utils on $display_name..."
+        # Check cifs-utils silently, only log issues
 
         # Skip if this is the local machine
         if [ "$machine_ip" == "$current_machine_ip" ]; then
-            echo "Running command locally on $machine_key..."
+            # Running locally - check silently
             if ! which mount.cifs >/dev/null 2>&1; then
-                echo "cifs-utils not installed on $machine_key"
-                echo "Installing cifs-utils on $machine_key..."
-                sudo apt-get update && sudo apt-get install -y cifs-utils
-                echo "cifs-utils is installed on $machine_key"
+                log "Installing cifs-utils on $machine_key..."
+                if sudo apt-get update && sudo apt-get install -y cifs-utils >/dev/null 2>&1; then
+                    log_success "cifs-utils installed on $machine_key"
+                else
+                    log_error "Failed to install cifs-utils on $machine_key"
+                    return 1
+                fi
             fi
             continue
         fi
 
-        echo "Running command on remote machine: $display_name..."
+        # Check remote machine silently
         local ssh_user
         ssh_user="$(machines_get_ssh_user "$machine_key")"
         if ! ssh_key_auth "$ssh_user@$machine_ip" "which mount.cifs >/dev/null 2>&1"; then
-            echo "Installing cifs-utils on $display_name..."
-            ssh_key_auth "$ssh_user@$machine_ip" "sudo apt-get update && sudo apt-get install -y cifs-utils"
+            log "Installing cifs-utils on $display_name..."
+            if ssh_key_auth "$ssh_user@$machine_ip" "sudo apt-get update && sudo apt-get install -y cifs-utils" >/dev/null 2>&1; then
+                log_success "cifs-utils installed on $display_name"
+            else
+                log_error "Failed to install cifs-utils on $display_name"
+                return 1
+            fi
         fi
-        echo "cifs-utils is installed on $display_name"
+        # Already installed - no need to log
     done
-    echo "cifs-utils is installed on all machines"
+    log_success "cifs-utils verification complete on all machines"
     return 0
 }

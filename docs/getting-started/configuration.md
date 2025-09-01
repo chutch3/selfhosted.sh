@@ -10,11 +10,14 @@ The homelab uses a minimal configuration approach:
 homelab/
 ├── .env                        # Environment variables (your copy)
 ├── .env.example               # Template with all options
+├── selfhosted.sh              # 🚀 Main deployment script
 ├── machines.yaml              # Multi-node Docker Swarm configuration
 ├── machines.yaml.example      # Template for machines setup
-├── scripts/                   # Deployment and management scripts
-│   ├── deploy.new.sh         # Main deployment script
+├── scripts/                   # Management and utility scripts
+│   ├── deploy.sh             # Legacy Docker Swarm deployment
+│   ├── deploy.simple.sh      # Legacy simple deployment
 │   ├── nuke.sh              # Complete cleanup script
+│   ├── swarm_cluster_manager.sh  # Cluster management
 │   └── configure_dns_records.sh  # DNS automation
 └── stacks/                    # Service definitions
     ├── apps/                 # Individual applications
@@ -261,8 +264,13 @@ SMB_PASSWORD=storage_password
 ### Main Deployment
 
 ```bash
-# Primary deployment script
-./scripts/deploy.new.sh
+# 🚀 Selfhosted Homelab Deployment Script
+./selfhosted.sh
+
+# Available commands:
+./selfhosted.sh deploy    # Full deployment (default)
+./selfhosted.sh nuke      # Complete cleanup
+./selfhosted.sh redeploy-service <service>  # Redeploy specific service
 ```
 
 This script handles:

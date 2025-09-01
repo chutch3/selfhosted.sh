@@ -9,10 +9,13 @@ The homelab uses a **stacks-based architecture** where each service is defined i
 ```
 homelab/
 ├── .env                    # Environment configuration
+├── selfhosted.sh          # 🚀 Main deployment script
 ├── machines.yaml           # Multi-node configuration
-├── scripts/
-│   ├── deploy.new.sh      # Main deployment script
+├── scripts/                # Management and utility scripts
+│   ├── deploy.sh          # Legacy Docker Swarm deployment
+│   ├── deploy.simple.sh   # Legacy simple deployment
 │   ├── nuke.sh           # Cleanup script
+│   ├── swarm_cluster_manager.sh  # Cluster management
 │   └── configure_dns_records.sh  # DNS automation
 └── stacks/               # Service definitions
     ├── apps/             # Application services
@@ -98,8 +101,8 @@ machines:
 The deployment script handles Docker Swarm setup and service deployment:
 
 ```bash
-# Deploy all infrastructure
-./scripts/deploy.new.sh
+# 🚀 Deploy all infrastructure with awesome ASCII art!
+./selfhosted.sh
 ```
 
 This script will:
@@ -393,8 +396,8 @@ If you need to start over completely:
 # WARNING: This will destroy all data and services
 ./scripts/nuke.sh
 
-# Redeploy from scratch
-./scripts/deploy.new.sh
+# Redeploy from scratch with style! 🚀
+./selfhosted.sh
 ```
 
 [Next: Learn about configuration options →](configuration.md)
