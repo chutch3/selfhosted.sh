@@ -89,6 +89,23 @@ mock_curl() {
     [[ "$output" == *"Added A record: manager.diyhub.dev -> 192.168.1.100"* ]]
 }
 
+@test "add_a_record should skip creation if record already exists" {
+    # Mock curl to simulate existing record
+    curl() {
+        if [[ "$*" == *"zones/records/get"* ]]; then
+            echo '{"status":"ok","response":{"records":[{"name":"manager","type":"A"}]}}'
+        else
+            mock_curl "$@"
+        fi
+    }
+    export -f curl mock_curl
+    export DNS_TOKEN="mock-token-12345"
+
+    run add_a_record "manager" "192.168.1.100"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"A record already exists: manager.diyhub.dev"* ]]
+}
+
 @test "add_cname_record should add CNAME record via API" {
     # Mock curl and set DNS token
     curl() { mock_curl "$@"; }
@@ -98,6 +115,23 @@ mock_curl() {
     run add_cname_record "actual" "manager.diyhub.dev"
     [ "$status" -eq 0 ]
     [[ "$output" == *"Added CNAME record: actual.diyhub.dev -> manager.diyhub.dev"* ]]
+}
+
+@test "add_cname_record should skip creation if record already exists" {
+    # Mock curl to simulate existing record
+    curl() {
+        if [[ "$*" == *"zones/records/get"* ]]; then
+            echo '{"status":"ok","response":{"records":[{"name":"actual","type":"CNAME"}]}}'
+        else
+            mock_curl "$@"
+        fi
+    }
+    export -f curl mock_curl
+    export DNS_TOKEN="mock-token-12345"
+
+    run add_cname_record "actual" "manager.diyhub.dev"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CNAME record already exists: actual.diyhub.dev"* ]]
 }
 
 @test "register_machine_dns_records should add A records for all machines" {
@@ -124,6 +158,38 @@ mock_curl() {
     [[ "$output" == *"dns"* ]]
     [[ "$output" == *"actual"* ]]
     [[ "$output" == *"homeassistant"* ]]
+}
+
+@test "check_record_exists should return 0 when record exists" {
+    # Mock curl to simulate existing record
+    curl() {
+        if [[ "$*" == *"zones/records/get"* ]]; then
+            echo '{"status":"ok","response":{"records":[{"name":"manager","type":"A"}]}}'
+        else
+            mock_curl "$@"
+        fi
+    }
+    export -f curl mock_curl
+    export DNS_TOKEN="mock-token-12345"
+
+    run check_record_exists "manager"
+    [ "$status" -eq 0 ]
+}
+
+@test "check_record_exists should return 1 when record does not exist" {
+    # Mock curl to simulate no existing record
+    curl() {
+        if [[ "$*" == *"zones/records/get"* ]]; then
+            echo '{"status":"ok","response":{"records":[]}}'
+        else
+            mock_curl "$@"
+        fi
+    }
+    export -f curl mock_curl
+    export DNS_TOKEN="mock-token-12345"
+
+    run check_record_exists "nonexistent"
+    [ "$status" -eq 1 ]
 }
 
 @test "get_dns_token urlencodes passwords correctly" {

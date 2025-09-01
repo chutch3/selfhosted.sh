@@ -73,11 +73,36 @@ get_dns_token() {
     echo "$token"
 }
 
+# Check if DNS record exists via Technitium API
+check_record_exists() {
+    local name="$1"
+    local domain="${BASE_DOMAIN:-diyhub.dev}"
+
+    local response
+    response=$(curl -s -X POST "${DNS_SERVER_URL}/api/zones/records/get" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "token=${DNS_TOKEN}" \
+        -d "domain=${domain}" \
+        -d "name=${name}")
+
+    if [[ "$response" == *'"status":"ok"'* ]] && [[ "$response" == *'"records":['* ]] && [[ "$response" != *'"records":[]'* ]]; then
+        return 0  # Record exists
+    else
+        return 1  # Record does not exist
+    fi
+}
+
 # Add DNS A record via Technitium API
 add_a_record() {
     local name="$1"
     local ip="$2"
     local domain="${BASE_DOMAIN:-diyhub.dev}"
+
+    # Check if record already exists
+    if check_record_exists "$name"; then
+        log "A record already exists: ${name}.${domain}"
+        return 0
+    fi
 
     local response
     if response=$(curl -s -X POST "${DNS_SERVER_URL}/api/zones/records/add" \
@@ -102,6 +127,12 @@ add_cname_record() {
     local name="$1"
     local target="$2"
     local domain="${BASE_DOMAIN:-diyhub.dev}"
+
+    # Check if record already exists
+    if check_record_exists "$name"; then
+        log "CNAME record already exists: ${name}.${domain}"
+        return 0
+    fi
 
     local response
     if response=$(curl -s -X POST "${DNS_SERVER_URL}/api/zones/records/add" \
