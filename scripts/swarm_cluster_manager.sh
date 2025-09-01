@@ -166,6 +166,53 @@ check_all_workers_swarm_status() {
     done
 }
 
+# =======================
+# Node Label Management Functions
+# =======================
+
+# Function: node_has_label
+# Description: Check if a Docker node already has a specific label
+# Arguments: $1 - node name, $2 - label in key=value format
+# Returns: 0 if label exists, 1 if not
+node_has_label() {
+    local node_name="$1"
+    local target_label="$2"
+
+    if [[ -z "$node_name" || -z "$target_label" ]]; then
+        echo "Error: node_name and target_label are required" >&2
+        return 1
+    fi
+
+    # Get current labels from Docker node
+    local current_labels
+    if command -v docker_node_inspect >/dev/null 2>&1; then
+        current_labels=$(docker_node_inspect "$node_name" "{{range \$k,\$v := .Spec.Labels}}\$k=\$v,{{end}}")
+    else
+        current_labels=$(docker node inspect "$node_name" --format "{{range \$k,\$v := .Spec.Labels}}\$k=\$v,{{end}}" 2>/dev/null)
+    fi
+
+    # Check if target label exists in current labels
+    [[ "$current_labels" == *"$target_label"* ]]
+}
+
+# Function: get_missing_labels_for_node
+# Description: Get labels that need to be applied to a node (don't exist yet)
+# Arguments: $1 - node name, $2 - space-separated list of desired labels
+# Returns: Space-separated list of missing labels
+get_missing_labels_for_node() {
+    local node_name="$1"
+    local desired_labels="$2"
+    local missing_labels=()
+
+    for label in $desired_labels; do
+        if [[ -n "$label" ]] && ! node_has_label "$node_name" "$label"; then
+            missing_labels+=("$label")
+        fi
+    done
+
+    printf '%s ' "${missing_labels[@]}"
+}
+
 # Function: get_manager_machine
 # Description: Get the manager machine from configuration
 # Arguments: $1 - config file path
@@ -461,27 +508,29 @@ label_swarm_nodes() {
             role="worker"
         fi
 
-        # Apply machine ID label (KEY CHANGE: This enables future lookups)
-        if command -v docker_node_update_label >/dev/null 2>&1; then
-            docker_node_update_label "--label-add" "machine.id=$machine" "$docker_node_name"
-            docker_node_update_label "--label-add" "machine.role=$role" "$docker_node_name"
-        else
-            echo "Mock: docker node update --label-add machine.id=$machine $docker_node_name" >&2
-            echo "Mock: docker node update --label-add machine.role=$role $docker_node_name" >&2
-        fi
+        # IDEMPOTENCY: Apply machine ID and role labels only if missing
+        local machine_id_label="machine.id=$machine"
+        local machine_role_label="machine.role=$role"
+        local all_labels="$machine_id_label $machine_role_label"
 
-        # Apply custom labels from machines.yaml
-        local labels
-        labels=$(get_machine_labels "$machine" "$config_file")
+        # Add custom labels from machines.yaml
+        local custom_labels
+        custom_labels=$(get_machine_labels "$machine" "$config_file")
+        all_labels="$all_labels $custom_labels"
 
-        for label in $labels; do
+        # Apply each label only if it doesn't exist
+        for label in $all_labels; do
             if [[ -n "$label" ]]; then
-                if command -v docker_node_update_label >/dev/null 2>&1; then
-                    docker_node_update_label "--label-add" "$label" "$docker_node_name"
+                if ! node_has_label "$docker_node_name" "$label"; then
+                    if command -v docker_node_update_label >/dev/null 2>&1; then
+                        docker_node_update_label "--label-add" "$label" "$docker_node_name"
+                    else
+                        echo "Mock: docker node update --label-add $label $docker_node_name" >&2
+                    fi
+                    echo "Applied label '$label' to $machine" >&2
                 else
-                    echo "Mock: docker node update --label-add $label $docker_node_name" >&2
+                    echo "Skipping existing label '$label' on $machine" >&2
                 fi
-                echo "Applied label '$label' to $machine" >&2
             fi
         done
 

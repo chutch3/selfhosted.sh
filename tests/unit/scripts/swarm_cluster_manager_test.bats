@@ -523,6 +523,68 @@ EOF
     [[ "$output" == *"gpu=nvidia"* ]]               # KEEP: Custom labels
 }
 
+# ================================
+# RED Phase - Node Label Idempotency Tests
+# ================================
+
+@test "node_has_label detects existing labels correctly" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock docker node inspect to return existing labels
+    docker_node_inspect() {
+        local node="$1"
+        local format="$2"
+        if [[ "$format" == *"Spec.Labels"* ]]; then
+            echo "machine.id=worker-01,storage=ssd,gpu=nvidia"
+        fi
+        return 0
+    }
+    export -f docker_node_inspect
+
+    run node_has_label "worker-01" "storage=ssd"
+    [ "$status" -eq 0 ]  # Should find existing label
+
+    run node_has_label "worker-01" "missing=label"
+    [ "$status" -eq 1 ]  # Should NOT find non-existent label
+}
+
+@test "label_swarm_nodes skips labels that already exist" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock: node already has some labels
+    node_has_label() {
+        local node="$1"
+        local label="$2"
+        case "$label" in
+            "machine.id=driver"|"storage=ssd")
+                return 0  # These labels already exist
+                ;;
+            *)
+                return 1  # Other labels don't exist
+                ;;
+        esac
+    }
+
+    # Track which labels are attempted to be added
+    docker_node_update_label() {
+        local action="$1"
+        local label="$2"
+        local node="$3"
+        echo "Mock: $action $label $node"
+        return 0
+    }
+
+    docker_node_ls() { echo "driver"; }
+    export -f node_has_label docker_node_update_label docker_node_ls
+
+    run label_swarm_nodes "$TEST_CONFIG"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Skipping existing label"* ]]  # Should indicate skipping (note capitalization)
+    [[ "$output" != *"Mock: --label-add machine.id=driver"* ]]  # Should NOT add existing label
+    [[ "$output" != *"Mock: --label-add storage=ssd"* ]]  # Should NOT add existing label
+    [[ "$output" == *"Mock: --label-add gpu=nvidia"* ]]  # SHOULD add missing label
+}
+
 @test "monitor_swarm_cluster shows cluster status" {
     # Mock functions
     docker_node_list() {
