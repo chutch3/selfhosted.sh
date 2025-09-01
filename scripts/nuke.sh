@@ -53,6 +53,7 @@ cleanup_dns_records() {
 
   # Source environment variables if available
   if [ -f "$PROJECT_ROOT/.env" ]; then
+    # shellcheck source=/dev/null
     source "$PROJECT_ROOT/.env"
   fi
 

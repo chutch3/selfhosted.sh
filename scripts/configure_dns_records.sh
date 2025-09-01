@@ -292,6 +292,7 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     fi
 
     # Source environment variables
+    # shellcheck source=/dev/null
     source "$PROJECT_ROOT/.env"
 
     # Extract driver machine IP from machines.yaml
