@@ -269,6 +269,65 @@ EOF
     [ "$(cat "$SWARM_TOKEN_FILE")" = "SWMTKN-1-test-token-12345" ]
 }
 
+# ================================
+# RED Phase - Idempotency Tests for initialize_swarm_cluster
+# ================================
+
+@test "initialize_swarm_cluster skips init when swarm already active" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock to show swarm is already active
+    is_swarm_active() { return 0; }  # Swarm already active
+    is_node_manager() { return 0; }  # Already manager
+    machines_my_ip() { echo "127.0.0.1"; }
+
+    # This should NOT be called if swarm is already active
+    docker_swarm_init() {
+        echo "ERROR: docker_swarm_init was called when swarm already active!"
+        return 1  # This should cause test failure
+    }
+    export -f is_swarm_active is_node_manager machines_my_ip docker_swarm_init
+
+    cat > "$TEST_DIR/machines.yaml" << 'EOF'
+machines:
+  manager:
+    ip: 127.0.0.1
+    ssh_user: testuser
+    role: manager
+EOF
+
+    run initialize_swarm_cluster "$TEST_DIR/machines.yaml"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"already initialized"* ]]  # Should indicate skipping
+    [[ "$output" != *"ERROR: docker_swarm_init was called"* ]]  # Should NOT call init
+}
+
+@test "initialize_swarm_cluster proceeds with init when swarm inactive" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock swarm state to be inactive (need to init)
+    is_swarm_active() { return 1; }  # Swarm NOT active
+    docker_swarm_init() { echo "Mock: docker swarm init $1"; return 0; }
+    docker_swarm_get_worker_token() { echo "SWMTKN-1-new-token"; return 0; }
+    join_worker_nodes() { return 0; }
+    label_swarm_nodes() { return 0; }
+    machines_my_ip() { echo "127.0.0.1"; }
+    export -f is_swarm_active docker_swarm_init docker_swarm_get_worker_token join_worker_nodes label_swarm_nodes machines_my_ip
+
+    cat > "$TEST_DIR/machines.yaml" << 'EOF'
+machines:
+  manager:
+    ip: 127.0.0.1
+    ssh_user: testuser
+    role: manager
+EOF
+
+    run initialize_swarm_cluster "$TEST_DIR/machines.yaml"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Initializing Docker Swarm cluster"* ]]
+    [[ "$output" == *"docker swarm init"* ]]  # SHOULD attempt init
+}
+
 @test "join_worker_nodes joins workers to cluster" {
     # Mock functions
     # shellcheck disable=SC2317
@@ -415,6 +474,129 @@ EOF
     run "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh" init-cluster -c "$TEST_CONFIG"
     [ "$status" -eq 0 ]
     [[ "$output" == *"Swarm cluster initialization complete"* ]]
+}
+
+# ================================
+# RED Phase - Swarm State Detection Tests
+# ================================
+
+@test "is_swarm_active returns 0 when swarm is active" {
+    # Mock docker info to return active swarm state
+    docker() {
+        if [[ "$1" == "info" && "$2" == "--format" && "$3" == "{{.Swarm.LocalNodeState}}" ]]; then
+            echo "active"
+            return 0
+        fi
+        return 1
+    }
+    export -f docker
+
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    run is_swarm_active
+    [ "$status" -eq 0 ]
+}
+
+@test "is_swarm_active returns 1 when swarm is inactive" {
+    # Mock docker info to return inactive swarm state
+    docker() {
+        if [[ "$1" == "info" && "$2" == "--format" && "$3" == "{{.Swarm.LocalNodeState}}" ]]; then
+            echo "inactive"
+            return 0
+        fi
+        return 1
+    }
+    export -f docker
+
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    run is_swarm_active
+    [ "$status" -eq 1 ]
+}
+
+@test "is_node_manager returns 0 when node is manager" {
+    # Mock docker info to return manager status
+    docker() {
+        if [[ "$1" == "info" && "$2" == "--format" && "$3" == "{{.Swarm.ControlAvailable}}" ]]; then
+            echo "true"
+            return 0
+        fi
+        return 1
+    }
+    export -f docker
+
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    run is_node_manager
+    [ "$status" -eq 0 ]
+}
+
+@test "is_node_manager returns 1 when node is worker" {
+    # Mock docker info to return worker status
+    docker() {
+        if [[ "$1" == "info" && "$2" == "--format" && "$3" == "{{.Swarm.ControlAvailable}}" ]]; then
+            echo "false"
+            return 0
+        fi
+        return 1
+    }
+    export -f docker
+
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    run is_node_manager
+    [ "$status" -eq 1 ]
+}
+
+@test "get_swarm_status returns correct status information" {
+    # Mock docker info to return comprehensive swarm info
+    docker() {
+        if [[ "$1" == "info" && "$2" == "--format" ]]; then
+            case "$3" in
+                "{{.Swarm.LocalNodeState}}")
+                    echo "active"
+                    return 0
+                    ;;
+                "{{.Swarm.ControlAvailable}}")
+                    echo "true"
+                    return 0
+                    ;;
+                "{{.Swarm.NodeID}}")
+                    echo "test-node-id-123"
+                    return 0
+                    ;;
+            esac
+        fi
+        return 1
+    }
+    export -f docker
+
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    run get_swarm_status
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"active"* ]]
+    [[ "$output" == *"manager"* ]]
+    [[ "$output" == *"test-node-id-123"* ]]
+}
+
+@test "is_remote_node_in_swarm checks remote node via SSH" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock SSH command AFTER sourcing to override the real function
+    ssh_execute() {
+        local node="$1"
+        local cmd="$2"
+        if [[ "$cmd" == *"docker info"* && "$cmd" == *"LocalNodeState"* ]]; then
+            echo "active"
+            return 0
+        fi
+        return 1
+    }
+    export -f ssh_execute
+
+    run is_remote_node_in_swarm "testuser@testhost"
+    [ "$status" -eq 0 ]
 }
 
 # ================================

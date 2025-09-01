@@ -13,17 +13,84 @@ source "$SCRIPT_DIR/ssh.sh"
 # shellcheck source=scripts/machines.sh
 source "$SCRIPT_DIR/machines.sh"
 
-# check if docker is installed and running
-if ! command -v docker &> /dev/null; then
-  echo "Error: docker could not be found"
-  exit 1
+# check if docker is installed and running (skip in test mode)
+if [ -z "${TEST:-}" ]; then
+  if ! command -v docker &> /dev/null; then
+    echo "Error: docker could not be found"
+    exit 1
+  fi
+
+  if ! docker info &> /dev/null; then
+    echo "Error: docker is not running"
+    exit 1
+  fi
 fi
 
-if ! docker info &> /dev/null; then
-  echo "Error: docker is not running"
-  exit 1
-fi
 
+# =======================
+# Swarm State Detection Functions
+# =======================
+
+# Function: is_swarm_active
+# Description: Check if Docker Swarm is currently active on local node
+# Arguments: None
+# Returns: 0 if swarm is active, 1 if inactive or error
+is_swarm_active() {
+    local swarm_state
+    swarm_state=$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || echo "inactive")
+    [[ "$swarm_state" == "active" ]]
+}
+
+# Function: is_node_manager
+# Description: Check if current node is a swarm manager
+# Arguments: None
+# Returns: 0 if node is manager, 1 if worker/not in swarm/error
+is_node_manager() {
+    local control_available
+    control_available=$(docker info --format '{{.Swarm.ControlAvailable}}' 2>/dev/null || echo "false")
+    [[ "$control_available" == "true" ]]
+}
+
+# Function: get_swarm_status
+# Description: Get comprehensive swarm status information for local node
+# Arguments: None
+# Returns: Multi-line status information
+get_swarm_status() {
+    local swarm_state control_available node_id role
+
+    swarm_state=$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || echo "unknown")
+    control_available=$(docker info --format '{{.Swarm.ControlAvailable}}' 2>/dev/null || echo "false")
+    node_id=$(docker info --format '{{.Swarm.NodeID}}' 2>/dev/null || echo "unknown")
+
+    if [[ "$control_available" == "true" ]]; then
+        role="manager"
+    elif [[ "$swarm_state" == "active" ]]; then
+        role="worker"
+    else
+        role="not-in-swarm"
+    fi
+
+    echo "Swarm State: $swarm_state"
+    echo "Node Role: $role"
+    echo "Node ID: $node_id"
+}
+
+# Function: is_remote_node_in_swarm
+# Description: Check if a remote node is part of a swarm via SSH
+# Arguments: $1 - user@host format
+# Returns: 0 if node is in swarm, 1 if not in swarm or connection error
+is_remote_node_in_swarm() {
+    local node="$1"
+    local swarm_state
+
+    if [[ -z "$node" ]]; then
+        echo "Error: node argument is required" >&2
+        return 1
+    fi
+
+    swarm_state=$(ssh_execute "$node" "docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null" 2>/dev/null | tr -d '\r\n')
+    [[ "$swarm_state" == "active" ]]
+}
 
 # Function: get_manager_machine
 # Description: Get the manager machine from configuration
@@ -112,13 +179,27 @@ initialize_swarm_cluster() {
 
     echo "Initializing Docker Swarm cluster..." >&2
 
-    # Get manager node details
+    # Get manager node details - this will fail if config is invalid
     local manager_machine
     manager_machine=$(get_manager_machine "$config_file")
+    if [[ -z "$manager_machine" ]]; then
+        echo "Error: No manager machine found in configuration" >&2
+        return 1
+    fi
+
     local manager_host
     manager_host=$(get_machine_host "$manager_machine" "$config_file")
+    if [[ -z "$manager_host" ]]; then
+        echo "Error: Could not determine manager host" >&2
+        return 1
+    fi
+
     local manager_user
     manager_user=$(get_machine_user "$manager_machine" "$config_file")
+    if [[ -z "$manager_user" ]]; then
+        echo "Error: Could not determine manager user" >&2
+        return 1
+    fi
 
     local my_ip
     my_ip=$(machines_my_ip)
@@ -126,27 +207,45 @@ initialize_swarm_cluster() {
     local manager_ip
     manager_ip="$manager_host"
 
-    echo "Initializing Swarm on manager: $manager_user@$manager_host ($manager_machine)" >&2
-
-    # Initialize Swarm on manager node
+    # IDEMPOTENCY CHECK: Skip initialization if swarm already active
     local join_token
-    if [[ "$my_ip" == "$manager_ip" ]]; then
-        # Local manager initialization - call mock functions if they exist
-        if command -v docker_swarm_init >/dev/null 2>&1; then
-            docker_swarm_init "$my_ip"
-            join_token=$(docker_swarm_get_worker_token)
+    if is_swarm_active; then
+        echo "Swarm already initialized on this node, skipping init phase" >&2
+
+        # Get existing join token for worker operations if we're the manager
+        if is_node_manager; then
+            echo "Retrieving existing worker join token..." >&2
+            if command -v docker_swarm_get_worker_token >/dev/null 2>&1; then
+                join_token=$(docker_swarm_get_worker_token)
+            else
+                join_token="SWMTKN-1-existing-token"
+            fi
         else
-            echo "Mock: docker swarm init --advertise-addr $manager_host" >&2
-            join_token="SWMTKN-1-test-token-12345"
+            echo "Warning: Node is in swarm but not a manager, cannot get join token" >&2
+            join_token=""
         fi
     else
-        # Remote manager initialization
-        if command -v ssh_docker_command >/dev/null 2>&1; then
-            ssh_docker_command "$manager_user@$manager_host" "docker swarm init --advertise-addr $manager_host"
-            join_token=$(ssh_docker_command "$manager_user@$manager_host" "docker swarm join-token -q worker")
+        echo "Initializing Swarm on manager: $manager_user@$manager_host ($manager_machine)" >&2
+
+        # Initialize Swarm on manager node
+        if [[ "$my_ip" == "$manager_ip" ]]; then
+            # Local manager initialization - call mock functions if they exist
+            if command -v docker_swarm_init >/dev/null 2>&1; then
+                docker_swarm_init "$my_ip"
+                join_token=$(docker_swarm_get_worker_token)
+            else
+                echo "Mock: docker swarm init --advertise-addr $manager_host" >&2
+                join_token="SWMTKN-1-test-token-12345"
+            fi
         else
-            echo "Mock: SSH to $manager_user@$manager_host for swarm init" >&2
-            join_token="SWMTKN-1-test-token-12345"
+            # Remote manager initialization
+            if command -v ssh_docker_command >/dev/null 2>&1; then
+                ssh_docker_command "$manager_user@$manager_host" "docker swarm init --advertise-addr $manager_host"
+                join_token=$(ssh_docker_command "$manager_user@$manager_host" "docker swarm join-token -q worker")
+            else
+                echo "Mock: SSH to $manager_user@$manager_host for swarm init" >&2
+                join_token="SWMTKN-1-test-token-12345"
+            fi
         fi
     fi
 
