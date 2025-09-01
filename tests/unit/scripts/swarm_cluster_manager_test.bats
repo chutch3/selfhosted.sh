@@ -346,6 +346,106 @@ EOF
     [[ "$output" == *"node-02"* ]]
 }
 
+# ================================
+# RED Phase - Worker Node Membership Checking Tests
+# ================================
+
+@test "is_worker_in_swarm detects node already in swarm" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock is_remote_node_in_swarm to return success (node in swarm)
+    is_remote_node_in_swarm() { return 0; }
+    export -f is_remote_node_in_swarm
+
+    run is_worker_in_swarm "testuser@worker-01"
+    [ "$status" -eq 0 ]
+}
+
+@test "is_worker_in_swarm detects node not in swarm" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock is_remote_node_in_swarm to return failure (node not in swarm)
+    is_remote_node_in_swarm() { return 1; }
+    export -f is_remote_node_in_swarm
+
+    run is_worker_in_swarm "testuser@worker-01"
+    [ "$status" -eq 1 ]
+}
+
+@test "get_workers_not_in_swarm returns only unjoined workers" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock worker status: worker-01 (IP .101) is in swarm, worker-02 (IP .102) is not
+    is_remote_node_in_swarm() {
+        local node="$1"
+        if [[ "$node" == *"192.168.1.101"* ]]; then
+            return 0  # worker-01 (IP .101) is in swarm
+        else
+            return 1  # worker-02 (IP .102) is NOT in swarm
+        fi
+    }
+    export -f is_remote_node_in_swarm
+
+    # Create config with two workers
+    cat > "$TEST_DIR/machines.yaml" << 'EOF'
+machines:
+  manager:
+    ip: 192.168.1.100
+    ssh_user: testuser
+    role: manager
+  worker-01:
+    ip: 192.168.1.101
+    ssh_user: testuser
+    role: worker
+  worker-02:
+    ip: 192.168.1.102
+    ssh_user: testuser
+    role: worker
+EOF
+
+    run get_workers_not_in_swarm "$TEST_DIR/machines.yaml"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"worker-02"* ]]      # Should include worker-02 (not in swarm)
+    [[ "$output" != *"worker-01"* ]]      # Should NOT include worker-01 (already in swarm)
+}
+
+@test "check_all_workers_swarm_status provides comprehensive status" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock mixed worker status: worker-01 (IP .101) is in swarm, worker-02 (IP .102) is not
+    is_remote_node_in_swarm() {
+        local node="$1"
+        if [[ "$node" == *"192.168.1.101"* ]]; then
+            return 0  # worker-01 (IP .101) is in swarm
+        else
+            return 1  # worker-02 (IP .102) is NOT in swarm
+        fi
+    }
+    export -f is_remote_node_in_swarm
+
+    # Create config with two workers
+    cat > "$TEST_DIR/machines.yaml" << 'EOF'
+machines:
+  manager:
+    ip: 192.168.1.100
+    ssh_user: testuser
+    role: manager
+  worker-01:
+    ip: 192.168.1.101
+    ssh_user: testuser
+    role: worker
+  worker-02:
+    ip: 192.168.1.102
+    ssh_user: testuser
+    role: worker
+EOF
+
+    run check_all_workers_swarm_status "$TEST_DIR/machines.yaml"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"worker-01: IN SWARM"* ]]
+    [[ "$output" == *"worker-02: NOT IN SWARM"* ]]
+}
+
 @test "label_swarm_nodes applies machine labels" {
     # Mock functions
     # shellcheck disable=SC2317

@@ -92,6 +92,80 @@ is_remote_node_in_swarm() {
     [[ "$swarm_state" == "active" ]]
 }
 
+# =======================
+# Worker Node Membership Functions
+# =======================
+
+# Function: is_worker_in_swarm
+# Description: Check if a specific worker node is already in the swarm
+# Arguments: $1 - user@host format
+# Returns: 0 if worker is in swarm, 1 if not or error
+is_worker_in_swarm() {
+    local worker_node="$1"
+
+    if [[ -z "$worker_node" ]]; then
+        echo "Error: worker_node argument is required" >&2
+        return 1
+    fi
+
+    is_remote_node_in_swarm "$worker_node"
+}
+
+# Function: get_workers_not_in_swarm
+# Description: Get list of worker machines that are not yet in the swarm
+# Arguments: $1 - config file path
+# Returns: Space-separated list of worker machine names not in swarm
+get_workers_not_in_swarm() {
+    local config_file="${1:-machines.yaml}"
+    local workers_not_in_swarm=()
+
+    local workers
+    workers=$(get_worker_machines "$config_file")
+
+    for worker in $workers; do
+        if [[ -z "$worker" ]]; then
+            continue
+        fi
+
+        local worker_host worker_user
+        worker_host=$(get_machine_host "$worker" "$config_file")
+        worker_user=$(get_machine_user "$worker" "$config_file")
+
+        if ! is_worker_in_swarm "$worker_user@$worker_host"; then
+            workers_not_in_swarm+=("$worker")
+        fi
+    done
+
+    printf '%s ' "${workers_not_in_swarm[@]}"
+}
+
+# Function: check_all_workers_swarm_status
+# Description: Check and report swarm membership status for all workers
+# Arguments: $1 - config file path
+# Returns: Status report for all workers
+check_all_workers_swarm_status() {
+    local config_file="${1:-machines.yaml}"
+
+    local workers
+    workers=$(get_worker_machines "$config_file")
+
+    for worker in $workers; do
+        if [[ -z "$worker" ]]; then
+            continue
+        fi
+
+        local worker_host worker_user
+        worker_host=$(get_machine_host "$worker" "$config_file")
+        worker_user=$(get_machine_user "$worker" "$config_file")
+
+        if is_worker_in_swarm "$worker_user@$worker_host"; then
+            echo "$worker: IN SWARM"
+        else
+            echo "$worker: NOT IN SWARM"
+        fi
+    done
+}
+
 # Function: get_manager_machine
 # Description: Get the manager machine from configuration
 # Arguments: $1 - config file path
