@@ -4,7 +4,6 @@
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-152%20passing-brightgreen.svg)
 
 A Docker Swarm homelab platform with 13+ pre-configured services, automatic SSL certificates via Traefik, and network storage integration. Deploy your entire self-hosted infrastructure with one command.
 
@@ -180,7 +179,6 @@ task check
 1. Write tests first (TDD approach)
 2. Use conventional commit messages
 3. Update documentation for changes
-4. All 152 tests must pass
 
 ## 📄 License
 
