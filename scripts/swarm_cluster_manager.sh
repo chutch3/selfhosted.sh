@@ -525,41 +525,29 @@ initialize_swarm_cluster() {
     local join_token
     if is_swarm_active; then
         log "Swarm already initialized on this node, skipping init phase"
+        return 0
+    fi
 
-        # Get existing join token for worker operations if we're the manager
-        if is_node_manager; then
-            log "Retrieving existing worker join token..."
-            if command -v docker_swarm_get_worker_token >/dev/null 2>&1; then
-                join_token=$(docker_swarm_get_worker_token)
-            else
-                join_token="SWMTKN-1-existing-token"
-            fi
+    log "Initializing Swarm on manager: $manager_user@$manager_host ($manager_machine)"
+
+    # Initialize Swarm on manager node
+    if [[ "$my_ip" == "$manager_ip" ]]; then
+        # Local manager initialization - call mock functions if they exist
+        if command -v docker_swarm_init >/dev/null 2>&1; then
+            docker_swarm_init "$my_ip"
+            join_token=$(docker_swarm_get_worker_token)
         else
-            log_warn "Node is in swarm but not a manager, cannot get join token"
-            join_token=""
+            log "Mock: docker swarm init --advertise-addr $manager_host"
+            join_token="SWMTKN-1-test-token-12345"
         fi
     else
-        log "Initializing Swarm on manager: $manager_user@$manager_host ($manager_machine)"
-
-        # Initialize Swarm on manager node
-        if [[ "$my_ip" == "$manager_ip" ]]; then
-            # Local manager initialization - call mock functions if they exist
-            if command -v docker_swarm_init >/dev/null 2>&1; then
-                docker_swarm_init "$my_ip"
-                join_token=$(docker_swarm_get_worker_token)
-            else
-                log "Mock: docker swarm init --advertise-addr $manager_host"
-                join_token="SWMTKN-1-test-token-12345"
-            fi
+        # Remote manager initialization
+        if command -v ssh_docker_command >/dev/null 2>&1; then
+            ssh_docker_command "$manager_user@$manager_host" "docker swarm init --advertise-addr $manager_host"
+            join_token=$(ssh_docker_command "$manager_user@$manager_host" "docker swarm join-token -q worker")
         else
-            # Remote manager initialization
-            if command -v ssh_docker_command >/dev/null 2>&1; then
-                ssh_docker_command "$manager_user@$manager_host" "docker swarm init --advertise-addr $manager_host"
-                join_token=$(ssh_docker_command "$manager_user@$manager_host" "docker swarm join-token -q worker")
-            else
-                log "Mock: SSH to $manager_user@$manager_host for swarm init"
-                join_token="SWMTKN-1-test-token-12345"
-            fi
+            log "Mock: SSH to $manager_user@$manager_host for swarm init"
+            join_token="SWMTKN-1-test-token-12345"
         fi
     fi
 
