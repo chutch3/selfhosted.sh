@@ -13,15 +13,39 @@ source "$SCRIPT_DIR/ssh.sh"
 # shellcheck source=scripts/machines.sh
 source "$SCRIPT_DIR/machines.sh"
 
+# --- Colors and Logging ---
+COLOR_RESET='\033[0m'
+COLOR_RED='\033[0;31m'
+COLOR_GREEN='\033[0;32m'
+COLOR_YELLOW='\033[0;33m'
+COLOR_BLUE='\033[0;34m'
+COLOR_BOLD='\033[1m'
+
+log() {
+  echo -e "${COLOR_BLUE}[INFO]${COLOR_RESET} $1"
+}
+log_success() {
+  echo -e "${COLOR_GREEN}[SUCCESS]${COLOR_RESET} $1"
+}
+log_warn() {
+  echo -e "${COLOR_YELLOW}[WARN]${COLOR_RESET} $1"
+}
+log_error() {
+  echo -e "${COLOR_RED}[ERROR]${COLOR_RESET} $1" >&2
+}
+log_header() {
+  echo -e "\n${COLOR_BOLD}--- $1 ---${COLOR_RESET}"
+}
+
 # check if docker is installed and running (skip in test mode)
 if [ -z "${TEST:-}" ]; then
   if ! command -v docker &> /dev/null; then
-    echo "Error: docker could not be found"
+    log_error "docker could not be found"
     exit 1
   fi
 
   if ! docker info &> /dev/null; then
-    echo "Error: docker is not running"
+    log_error "docker is not running"
     exit 1
   fi
 fi
@@ -84,7 +108,7 @@ is_remote_node_in_swarm() {
     local swarm_state
 
     if [[ -z "$node" ]]; then
-        echo "Error: node argument is required" >&2
+        log_error "node argument is required"
         return 1
     fi
 
@@ -104,7 +128,7 @@ is_worker_in_swarm() {
     local worker_node="$1"
 
     if [[ -z "$worker_node" ]]; then
-        echo "Error: worker_node argument is required" >&2
+        log_error "worker_node argument is required"
         return 1
     fi
 
@@ -179,7 +203,7 @@ node_has_label() {
     local target_label="$2"
 
     if [[ -z "$node_name" || -z "$target_label" ]]; then
-        echo "Error: node_name and target_label are required" >&2
+        log_error "node_name and target_label are required"
         return 1
     fi
 
@@ -239,17 +263,17 @@ ensure_overlay_network() {
 
     # IDEMPOTENCY CHECK: Skip creation if network already exists
     if network_exists "$network_name"; then
-        echo "Network '$network_name' already exists, skipping creation" >&2
+        log "Network '$network_name' already exists, skipping creation"
         return 0
     fi
 
     # Create the overlay network
-    echo "Creating overlay network '$network_name'..." >&2
+    log "Creating overlay network '$network_name'..."
     if docker network create --driver=overlay --attachable "$network_name" >/dev/null; then
-        echo "Network '$network_name' created successfully" >&2
+        log_success "Network '$network_name' created successfully"
         return 0
     else
-        echo "Failed to create network '$network_name'" >&2
+        log_error "Failed to create network '$network_name'"
         return 1
     fi
 }
@@ -266,17 +290,17 @@ validate_config_file() {
     local config_file="$1"
 
     if [[ ! -f "$config_file" ]]; then
-        echo "Configuration file '$config_file' not found" >&2
+        log_error "Configuration file '$config_file' not found"
         return 1
     fi
 
     # Basic YAML structure validation
     if ! command -v yq >/dev/null 2>&1 && ! grep -q "machines:" "$config_file"; then
-        echo "Configuration file '$config_file' appears to be missing required 'machines:' section" >&2
+        log_error "Configuration file '$config_file' appears to be missing required 'machines:' section"
         return 1
     fi
 
-    echo "Configuration file '$config_file' validation passed" >&2
+    log_success "Configuration file '$config_file' validation passed"
     return 0
 }
 
@@ -288,7 +312,7 @@ validate_ssh_connectivity() {
     local config_file="$1"
     local failed=0
 
-    echo "Validating SSH connectivity to all machines..." >&2
+    log "Validating SSH connectivity to all machines..."
 
     # Get all machines from config
     local machines
@@ -298,20 +322,20 @@ validate_ssh_connectivity() {
         local user_host
         user_host="$(MACHINES_FILE="$config_file" machines_get_ssh_user "$machine")@$(MACHINES_FILE="$config_file" machines_get_ip "$machine")"
 
-        echo "Checking SSH connectivity to $user_host..." >&2
+        log "Checking SSH connectivity to $user_host..."
         if ssh_test_connection "$user_host"; then
-            echo "✓ SSH connectivity to $user_host successful" >&2
+            log_success "✓ SSH connectivity to $user_host successful"
         else
-            echo "✗ SSH connectivity to $user_host failed" >&2
+            log_error "✗ SSH connectivity to $user_host failed"
             failed=1
         fi
     done
 
     if [[ $failed -eq 0 ]]; then
-        echo "All SSH connectivity checks passed" >&2
+        log_success "All SSH connectivity checks passed"
         return 0
     else
-        echo "One or more SSH connectivity checks failed" >&2
+        log_error "One or more SSH connectivity checks failed"
         return 1
     fi
 }
@@ -324,7 +348,7 @@ validate_docker_availability() {
     local config_file="$1"
     local failed=0
 
-    echo "Validating Docker availability on all machines..." >&2
+    log "Validating Docker availability on all machines..."
 
     # Get all machines from config
     local machines
@@ -334,20 +358,20 @@ validate_docker_availability() {
         local user_host
         user_host="$(MACHINES_FILE="$config_file" machines_get_ssh_user "$machine")@$(MACHINES_FILE="$config_file" machines_get_ip "$machine")"
 
-        echo "Checking Docker availability on $user_host..." >&2
+        log "Checking Docker availability on $user_host..."
         if ssh_check_docker "$user_host"; then
-            echo "✓ Docker is running on $user_host" >&2
+            log_success "✓ Docker is running on $user_host"
         else
-            echo "✗ Docker is not available on $user_host" >&2
+            log_error "✗ Docker is not available on $user_host"
             failed=1
         fi
     done
 
     if [[ $failed -eq 0 ]]; then
-        echo "All Docker availability checks passed" >&2
+        log_success "All Docker availability checks passed"
         return 0
     else
-        echo "One or more Docker availability checks failed" >&2
+        log_error "One or more Docker availability checks failed"
         return 1
     fi
 }
@@ -360,7 +384,7 @@ run_preflight_checks() {
     local config_file="$1"
     local failed=0
 
-    echo "=== Running Pre-flight Validation Checks ===" >&2
+    log_header "PRE-FLIGHT VALIDATION CHECKS"
 
     # 1. Validate configuration file
     if ! validate_config_file "$config_file"; then
@@ -378,10 +402,10 @@ run_preflight_checks() {
     fi
 
     if [[ $failed -eq 0 ]]; then
-        echo "=== All Pre-flight Validation Checks Passed ===" >&2
+        log_success "All pre-flight validation checks passed"
         return 0
     else
-        echo "=== Pre-flight Validation Failed ===" >&2
+        log_error "Pre-flight validation failed"
         return 1
     fi
 }
@@ -467,27 +491,27 @@ get_machine_labels() {
 initialize_swarm_cluster() {
     local config_file="${1:-machines.yaml}"
 
-    echo "Initializing Docker Swarm cluster..." >&2
+    log_header "SWARM CLUSTER INITIALIZATION"
 
     # Get manager node details - this will fail if config is invalid
     local manager_machine
     manager_machine=$(get_manager_machine "$config_file")
     if [[ -z "$manager_machine" ]]; then
-        echo "Error: No manager machine found in configuration" >&2
+        log_error "No manager machine found in configuration"
         return 1
     fi
 
     local manager_host
     manager_host=$(get_machine_host "$manager_machine" "$config_file")
     if [[ -z "$manager_host" ]]; then
-        echo "Error: Could not determine manager host" >&2
+        log_error "Could not determine manager host"
         return 1
     fi
 
     local manager_user
     manager_user=$(get_machine_user "$manager_machine" "$config_file")
     if [[ -z "$manager_user" ]]; then
-        echo "Error: Could not determine manager user" >&2
+        log_error "Could not determine manager user"
         return 1
     fi
 
@@ -500,22 +524,22 @@ initialize_swarm_cluster() {
     # IDEMPOTENCY CHECK: Skip initialization if swarm already active
     local join_token
     if is_swarm_active; then
-        echo "Swarm already initialized on this node, skipping init phase" >&2
+        log "Swarm already initialized on this node, skipping init phase"
 
         # Get existing join token for worker operations if we're the manager
         if is_node_manager; then
-            echo "Retrieving existing worker join token..." >&2
+            log "Retrieving existing worker join token..."
             if command -v docker_swarm_get_worker_token >/dev/null 2>&1; then
                 join_token=$(docker_swarm_get_worker_token)
             else
                 join_token="SWMTKN-1-existing-token"
             fi
         else
-            echo "Warning: Node is in swarm but not a manager, cannot get join token" >&2
+            log_warn "Node is in swarm but not a manager, cannot get join token"
             join_token=""
         fi
     else
-        echo "Initializing Swarm on manager: $manager_user@$manager_host ($manager_machine)" >&2
+        log "Initializing Swarm on manager: $manager_user@$manager_host ($manager_machine)"
 
         # Initialize Swarm on manager node
         if [[ "$my_ip" == "$manager_ip" ]]; then
@@ -524,7 +548,7 @@ initialize_swarm_cluster() {
                 docker_swarm_init "$my_ip"
                 join_token=$(docker_swarm_get_worker_token)
             else
-                echo "Mock: docker swarm init --advertise-addr $manager_host" >&2
+                log "Mock: docker swarm init --advertise-addr $manager_host"
                 join_token="SWMTKN-1-test-token-12345"
             fi
         else
@@ -533,14 +557,14 @@ initialize_swarm_cluster() {
                 ssh_docker_command "$manager_user@$manager_host" "docker swarm init --advertise-addr $manager_host"
                 join_token=$(ssh_docker_command "$manager_user@$manager_host" "docker swarm join-token -q worker")
             else
-                echo "Mock: SSH to $manager_user@$manager_host for swarm init" >&2
+                log "Mock: SSH to $manager_user@$manager_host for swarm init"
                 join_token="SWMTKN-1-test-token-12345"
             fi
         fi
     fi
 
     if [[ $? -eq 0 && -n "$join_token" ]]; then
-        echo "Swarm manager initialized successfully" >&2
+        log_success "Swarm manager initialized successfully"
 
         # Save join token
         local token_file="${SWARM_TOKEN_FILE:-$PWD/.swarm_token}"
@@ -552,10 +576,10 @@ initialize_swarm_cluster() {
         # Label nodes (simplified for now)
         label_swarm_nodes "$config_file" || true
 
-        echo "Swarm cluster initialization complete" >&2
+        log_success "Swarm cluster initialization complete"
         return 0
     else
-        echo "Failed to initialize Swarm cluster" >&2
+        log_error "Failed to initialize Swarm cluster"
         return 1
     fi
 }
@@ -569,19 +593,18 @@ join_worker_nodes() {
     local join_token="$2"
     local manager_addr="$3"
 
-    echo "Joining worker nodes to Swarm cluster..." >&2
+    log_header "WORKER NODE JOINING"
 
     # IDEMPOTENCY: Get only workers that are NOT already in swarm
     local workers_to_join
     workers_to_join=$(get_workers_not_in_swarm "$config_file")
 
     if [[ -z "$workers_to_join" ]]; then
-        echo "All worker nodes are already in swarm, skipping join phase" >&2
+        log "All worker nodes are already in swarm, skipping join phase"
         return 0
     fi
 
-    echo "Found workers to join: $workers_to_join" >&2
-    echo "Checking worker membership status before joining..." >&2
+    log "Found workers to join: $workers_to_join"
 
     for worker in $workers_to_join; do
         if [[ -z "$worker" ]]; then
@@ -595,23 +618,23 @@ join_worker_nodes() {
 
         # Double-check worker is not in swarm (safety check)
         if is_worker_in_swarm "$worker_user@$worker_host"; then
-            echo "Worker $worker is already in swarm, skipping" >&2
+            log "Worker $worker is already in swarm, skipping"
             continue
         fi
 
-        echo "Joining worker: $worker ($worker_user@$worker_host)" >&2
+        log "Joining worker: $worker ($worker_user@$worker_host)"
 
         # Join worker to Swarm
         if command -v ssh_docker_command >/dev/null 2>&1; then
             if ssh_docker_command "$worker_user@$worker_host" "docker swarm join --token $join_token $manager_addr:2377"; then
-                echo "Worker $worker joined successfully" >&2
+                log_success "Worker $worker joined successfully"
             else
-                echo "Failed to join worker $worker" >&2
+                log_error "Failed to join worker $worker"
                 return 1
             fi
         else
-            echo "Mock: SSH to $worker_user@$worker_host for swarm join" >&2
-            echo "Worker $worker joined successfully" >&2
+            log "Mock: SSH to $worker_user@$worker_host for swarm join"
+            log_success "Worker $worker joined successfully"
         fi
     done
 
@@ -625,7 +648,7 @@ join_worker_nodes() {
 label_swarm_nodes() {
     local config_file="${1:-machines.yaml}"
 
-    echo "Labeling Swarm nodes..." >&2
+    log_header "NODE LABELING"
 
     # Get all machines from config
     local all_machines
@@ -636,7 +659,7 @@ label_swarm_nodes() {
             continue
         fi
 
-        echo "Labeling node: $machine" >&2
+        log "Labeling node: $machine"
 
         # Find the actual Docker node hostname for this machine
         # Use machine ID as the primary identifier
@@ -660,12 +683,12 @@ label_swarm_nodes() {
             # If still not found, use first available node as fallback
             if [[ -z "$docker_node_name" ]]; then
                 docker_node_name=$(echo "$nodes" | head -1)
-                echo "Warning: Could not map machine '$machine' to specific node, using '$docker_node_name'" >&2
+                log_warn "Could not map machine '$machine' to specific node, using '$docker_node_name'"
             fi
         fi
 
         if [[ -z "$docker_node_name" ]]; then
-            echo "Error: No Docker node found for machine '$machine'" >&2
+            log_error "No Docker node found for machine '$machine'"
             continue
         fi
 
@@ -694,16 +717,16 @@ label_swarm_nodes() {
                     if command -v docker_node_update_label >/dev/null 2>&1; then
                         docker_node_update_label "--label-add" "$label" "$docker_node_name"
                     else
-                        echo "Mock: docker node update --label-add $label $docker_node_name" >&2
+                        log "Mock: docker node update --label-add $label $docker_node_name"
                     fi
-                    echo "Applied label '$label' to $machine" >&2
+                    log_success "Applied label '$label' to $machine"
                 else
                     echo "Skipping existing label '$label' on $machine" >&2
                 fi
             fi
         done
 
-        echo "Node $docker_node_name labeled successfully" >&2
+        log_success "Node $docker_node_name labeled successfully"
     done
 
     return 0
@@ -714,7 +737,7 @@ label_swarm_nodes() {
 # Arguments: None
 # Returns: 0 on success, 1 on failure
 monitor_swarm_cluster() {
-    echo "Monitoring Swarm cluster health..."
+    log_header "SWARM CLUSTER MONITORING"
 
     echo ""
     echo "=== Swarm Node Status ==="
@@ -735,11 +758,11 @@ monitor_swarm_cluster() {
 
         if [[ -n "$unhealthy_nodes" ]]; then
             echo ""
-            echo "⚠️  Unhealthy nodes detected:"
+            log_warn "⚠️  Unhealthy nodes detected:"
             echo "$unhealthy_nodes"
         else
             echo ""
-            echo "✅ All nodes are healthy"
+            log_success "✅ All nodes are healthy"
         fi
     else
         # Mock output for testing
@@ -747,7 +770,7 @@ monitor_swarm_cluster() {
         echo -e "driver\tReady\tActive\tLeader"
         echo -e "node-01\tReady\tActive\t"
         echo ""
-        echo "✅ All nodes are healthy"
+        log_success "✅ All nodes are healthy"
     fi
 
     echo ""
@@ -809,7 +832,7 @@ main() {
                 exit 0
                 ;;
             -*)
-                echo "Unknown command: $1" >&2
+                log_error "Unknown command: $1"
                 usage
                 exit 1
                 ;;
@@ -827,7 +850,7 @@ main() {
             ;;
         join-workers)
             if [[ ! -f "${SWARM_TOKEN_FILE:-$PWD/.swarm_token}" ]]; then
-                echo "No swarm token found. Run 'init-cluster' first." >&2
+                log_error "No swarm token found. Run 'init-cluster' first."
                 exit 1
             fi
             local token
@@ -846,7 +869,7 @@ main() {
             usage
             ;;
         *)
-            echo "Unknown command: $command" >&2
+            log_error "Unknown command: $command"
             usage
             exit 1
             ;;

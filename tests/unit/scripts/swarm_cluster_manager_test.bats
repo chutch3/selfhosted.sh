@@ -327,7 +327,7 @@ EOF
 
     run initialize_swarm_cluster "$TEST_DIR/machines.yaml"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Initializing Docker Swarm cluster"* ]]
+    [[ "$output" == *"SWARM CLUSTER INITIALIZATION"* ]]
     [[ "$output" == *"docker swarm init"* ]]  # SHOULD attempt init
 }
 
