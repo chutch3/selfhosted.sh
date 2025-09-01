@@ -217,6 +217,43 @@ get_missing_labels_for_node() {
 # Description: Get the manager machine from configuration
 # Arguments: $1 - config file path
 # Returns: manager machine name
+# =======================
+# Network Creation Functions
+# =======================
+
+# Function: network_exists
+# Description: Check if a Docker network exists
+# Arguments: $1 - network name
+# Returns: 0 if network exists, 1 otherwise
+network_exists() {
+    local network_name="$1"
+    docker network ls --format '{{.Name}}' | grep -q "^${network_name}$"
+}
+
+# Function: ensure_overlay_network
+# Description: Create an overlay network if it doesn't exist (idempotent)
+# Arguments: $1 - network name
+# Returns: 0 on success, 1 on failure
+ensure_overlay_network() {
+    local network_name="$1"
+
+    # IDEMPOTENCY CHECK: Skip creation if network already exists
+    if network_exists "$network_name"; then
+        echo "Network '$network_name' already exists, skipping creation" >&2
+        return 0
+    fi
+
+    # Create the overlay network
+    echo "Creating overlay network '$network_name'..." >&2
+    if docker network create --driver=overlay --attachable "$network_name" >/dev/null; then
+        echo "Network '$network_name' created successfully" >&2
+        return 0
+    else
+        echo "Failed to create network '$network_name'" >&2
+        return 1
+    fi
+}
+
 get_manager_machine() {
     local config_file="${1:-machines.yaml}"
 

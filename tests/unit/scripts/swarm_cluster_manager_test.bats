@@ -842,3 +842,78 @@ EOF
     [ "$status" -eq 0 ]
     [ "$output" = "192.168.1.101" ]
 }
+
+# =======================
+# Network Creation Idempotency Tests
+# =======================
+
+@test "network_exists returns true when network exists" {
+    # Mock docker network ls
+    # shellcheck disable=SC2317
+    docker() {
+        if [[ "$1" == "network" && "$2" == "ls" ]]; then
+            echo "homelab-net"
+        fi
+    }
+    export -f docker
+
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    run network_exists "homelab-net"
+    [ "$status" -eq 0 ]
+}
+
+@test "network_exists returns false when network does not exist" {
+    # Mock docker network ls to return empty
+    # shellcheck disable=SC2317
+    docker() {
+        if [[ "$1" == "network" && "$2" == "ls" ]]; then
+            echo ""
+        fi
+    }
+    export -f docker
+
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    run network_exists "nonexistent-net"
+    [ "$status" -eq 1 ]
+}
+
+@test "ensure_overlay_network creates network when it does not exist" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock docker commands after sourcing
+    # shellcheck disable=SC2317
+    docker() {
+        if [[ "$1" == "network" && "$2" == "ls" ]]; then
+            echo ""  # Network doesn't exist
+        elif [[ "$1" == "network" && "$2" == "create" ]]; then
+            echo "MOCK_CREATE_CALLED"  # Use output to verify create was called
+        fi
+    }
+    export -f docker
+
+    run ensure_overlay_network "test-net"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Creating overlay network"* ]]
+}
+
+@test "ensure_overlay_network skips creation when network exists" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock docker commands after sourcing
+    # shellcheck disable=SC2317
+    docker() {
+        if [[ "$1" == "network" && "$2" == "ls" ]]; then
+            echo "test-net"  # Network exists
+        elif [[ "$1" == "network" && "$2" == "create" ]]; then
+            echo "MOCK_CREATE_SHOULD_NOT_BE_CALLED"
+        fi
+    }
+    export -f docker
+
+    run ensure_overlay_network "test-net"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"already exists"* ]]
+    [[ "$output" != *"MOCK_CREATE_SHOULD_NOT_BE_CALLED"* ]]
+}
