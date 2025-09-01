@@ -715,18 +715,16 @@ label_swarm_nodes() {
             if [[ -n "$label" ]]; then
                 if ! node_has_label "$docker_node_name" "$label"; then
                     if command -v docker_node_update_label >/dev/null 2>&1; then
-                        docker_node_update_label "--label-add" "$label" "$docker_node_name"
+                        docker_node_update_label "--label-add" "$label" "$docker_node_name" >/dev/null
                     else
                         log "Mock: docker node update --label-add $label $docker_node_name"
                     fi
                     log_success "Applied label '$label' to $machine"
-                else
-                    echo "Skipping existing label '$label' on $machine" >&2
                 fi
             fi
         done
 
-        log_success "Node $docker_node_name labeled successfully"
+        log_success "Node $machine labeled successfully"
     done
 
     return 0

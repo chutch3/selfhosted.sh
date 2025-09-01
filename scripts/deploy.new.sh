@@ -555,7 +555,6 @@ deploy_cluster() {
   machines_setup_ssh
   log "Checking for cifs-utils on all nodes..."
   machines_check_cifs_utils
-  log "Initializing Swarm cluster (if needed)..."
   "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh" init-cluster -c "$MACHINES_FILE"
 
   log_header "PHASE 2: CORE INFRASTRUCTURE"
