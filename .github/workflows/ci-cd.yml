@@ -127,13 +127,13 @@ jobs:
             - name: Run tests
               run: task test
 
-            - name: Produce the coverage report
-              uses: insightsengineering/coverage-action@v3
-              with:
-                  path: coverage/merged/kcov-merged/cobertura.xml
-                  threshold: 80.123
-                  fail: false
-                  publish: true
+            # - name: Produce the coverage report
+            #   uses: insightsengineering/coverage-action@v3
+            #   with:
+            #       path: coverage/merged/kcov-merged/cobertura.xml
+            #       threshold: 80.123
+            #       fail: false
+            #       publish: true
 
     release:
         name: Semantic Release
