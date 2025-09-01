@@ -355,10 +355,19 @@ join_worker_nodes() {
 
     echo "Joining worker nodes to Swarm cluster..." >&2
 
-    local workers
-    workers=$(get_worker_machines "$config_file")
+    # IDEMPOTENCY: Get only workers that are NOT already in swarm
+    local workers_to_join
+    workers_to_join=$(get_workers_not_in_swarm "$config_file")
 
-    for worker in $workers; do
+    if [[ -z "$workers_to_join" ]]; then
+        echo "All worker nodes are already in swarm, skipping join phase" >&2
+        return 0
+    fi
+
+    echo "Found workers to join: $workers_to_join" >&2
+    echo "Checking worker membership status before joining..." >&2
+
+    for worker in $workers_to_join; do
         if [[ -z "$worker" ]]; then
             continue
         fi
@@ -367,6 +376,12 @@ join_worker_nodes() {
         worker_host=$(get_machine_host "$worker" "$config_file")
         local worker_user
         worker_user=$(get_machine_user "$worker" "$config_file")
+
+        # Double-check worker is not in swarm (safety check)
+        if is_worker_in_swarm "$worker_user@$worker_host"; then
+            echo "Worker $worker is already in swarm, skipping" >&2
+            continue
+        fi
 
         echo "Joining worker: $worker ($worker_user@$worker_host)" >&2
 

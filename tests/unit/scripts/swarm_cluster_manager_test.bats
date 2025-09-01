@@ -347,6 +347,59 @@ EOF
 }
 
 # ================================
+# RED Phase - Idempotent Worker Joining Tests
+# ================================
+
+@test "join_worker_nodes skips workers already in swarm" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock: worker-01 is already in swarm, worker-02 is not
+    is_worker_in_swarm() {
+        local worker_node="$1"
+        if [[ "$worker_node" == *"192.168.1.101"* ]]; then
+            return 0  # worker-01 is already in swarm
+        else
+            return 1  # worker-02 is NOT in swarm
+        fi
+    }
+
+    # This should NOT be called for already-joined workers
+    ssh_docker_command() {
+        local node="$1"
+        local cmd="$2"
+        if [[ "$cmd" == *"swarm join"* ]]; then
+            echo "Mock: Joining $node"
+            return 0
+        fi
+        return 1
+    }
+    export -f is_worker_in_swarm ssh_docker_command
+
+    # Create test config
+    cat > "$TEST_DIR/machines.yaml" << 'EOF'
+machines:
+  manager:
+    ip: 192.168.1.100
+    ssh_user: testuser
+    role: manager
+  worker-01:
+    ip: 192.168.1.101
+    ssh_user: testuser
+    role: worker
+  worker-02:
+    ip: 192.168.1.102
+    ssh_user: testuser
+    role: worker
+EOF
+
+    run join_worker_nodes "$TEST_DIR/machines.yaml" "SWMTKN-1-test-token" "192.168.1.100"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Found workers to join: worker-02"* ]]  # Should only include worker-02
+    [[ "$output" == *"Joining worker: worker-02"* ]]  # Should only join worker-02
+    [[ "$output" != *"worker-01"* ]]  # Should NOT include worker-01 anywhere
+}
+
+# ================================
 # RED Phase - Worker Node Membership Checking Tests
 # ================================
 
