@@ -7,6 +7,9 @@
 load test_helper
 
 setup() {
+    # Set TEST mode to skip Docker validation during script sourcing
+    export TEST=1
+
     # Set PROJECT_ROOT relative to test location
     local project_root_path
     project_root_path="$(cd "$(dirname "$BATS_TEST_FILENAME")/../../.." && pwd)"
