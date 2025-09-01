@@ -917,3 +917,82 @@ EOF
     [[ "$output" == *"already exists"* ]]
     [[ "$output" != *"MOCK_CREATE_SHOULD_NOT_BE_CALLED"* ]]
 }
+
+# =======================
+# Pre-flight Validation Tests
+# =======================
+
+@test "validate_config_file returns true for valid configuration" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    run validate_config_file "$TEST_CONFIG"
+    [ "$status" -eq 0 ]
+}
+
+@test "validate_config_file returns false for missing file" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    run validate_config_file "/nonexistent/config.yaml"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"not found"* ]]
+}
+
+@test "validate_ssh_connectivity checks all machines" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock ssh_test_connection
+    # shellcheck disable=SC2317
+    ssh_test_connection() {
+        echo "SSH connectivity check for $1"
+        return 0  # Success
+    }
+    export -f ssh_test_connection
+
+    run validate_ssh_connectivity "$TEST_CONFIG"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SSH connectivity check"* ]]
+}
+
+@test "validate_docker_availability checks Docker on all machines" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock ssh_check_docker
+    # shellcheck disable=SC2317
+    ssh_check_docker() {
+        echo "Docker check for $1"
+        return 0  # Docker is running
+    }
+    export -f ssh_check_docker
+
+    run validate_docker_availability "$TEST_CONFIG"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Docker check"* ]]
+}
+
+@test "run_preflight_checks validates all requirements" {
+    source "$PROJECT_ROOT/scripts/swarm_cluster_manager.sh"
+
+    # Mock all validation functions to succeed
+    # shellcheck disable=SC2317
+    validate_config_file() {
+        echo "Config validation passed"
+        return 0
+    }
+    # shellcheck disable=SC2317
+    validate_ssh_connectivity() {
+        echo "SSH validation passed"
+        return 0
+    }
+    # shellcheck disable=SC2317
+    validate_docker_availability() {
+        echo "Docker validation passed"
+        return 0
+    }
+    export -f validate_config_file validate_ssh_connectivity validate_docker_availability
+
+    run run_preflight_checks "$TEST_CONFIG"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Config validation passed"* ]]
+    [[ "$output" == *"SSH validation passed"* ]]
+    [[ "$output" == *"Docker validation passed"* ]]
+}

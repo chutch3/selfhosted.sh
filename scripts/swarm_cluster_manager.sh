@@ -254,6 +254,138 @@ ensure_overlay_network() {
     fi
 }
 
+# =======================
+# Pre-flight Validation Functions
+# =======================
+
+# Function: validate_config_file
+# Description: Validate configuration file exists and has required structure
+# Arguments: $1 - config file path
+# Returns: 0 if valid, 1 if invalid
+validate_config_file() {
+    local config_file="$1"
+
+    if [[ ! -f "$config_file" ]]; then
+        echo "Configuration file '$config_file' not found" >&2
+        return 1
+    fi
+
+    # Basic YAML structure validation
+    if ! command -v yq >/dev/null 2>&1 && ! grep -q "machines:" "$config_file"; then
+        echo "Configuration file '$config_file' appears to be missing required 'machines:' section" >&2
+        return 1
+    fi
+
+    echo "Configuration file '$config_file' validation passed" >&2
+    return 0
+}
+
+# Function: validate_ssh_connectivity
+# Description: Check SSH connectivity to all machines in configuration
+# Arguments: $1 - config file path
+# Returns: 0 if all connections successful, 1 if any fail
+validate_ssh_connectivity() {
+    local config_file="$1"
+    local failed=0
+
+    echo "Validating SSH connectivity to all machines..." >&2
+
+    # Get all machines from config
+    local machines
+    machines=$(MACHINES_FILE="$config_file" machines_parse all)
+
+    for machine in $machines; do
+        local user_host
+        user_host="$(MACHINES_FILE="$config_file" machines_get_ssh_user "$machine")@$(MACHINES_FILE="$config_file" machines_get_ip "$machine")"
+
+        echo "Checking SSH connectivity to $user_host..." >&2
+        if ssh_test_connection "$user_host"; then
+            echo "✓ SSH connectivity to $user_host successful" >&2
+        else
+            echo "✗ SSH connectivity to $user_host failed" >&2
+            failed=1
+        fi
+    done
+
+    if [[ $failed -eq 0 ]]; then
+        echo "All SSH connectivity checks passed" >&2
+        return 0
+    else
+        echo "One or more SSH connectivity checks failed" >&2
+        return 1
+    fi
+}
+
+# Function: validate_docker_availability
+# Description: Check Docker is running on all machines
+# Arguments: $1 - config file path
+# Returns: 0 if Docker running on all machines, 1 if any fail
+validate_docker_availability() {
+    local config_file="$1"
+    local failed=0
+
+    echo "Validating Docker availability on all machines..." >&2
+
+    # Get all machines from config
+    local machines
+    machines=$(MACHINES_FILE="$config_file" machines_parse all)
+
+    for machine in $machines; do
+        local user_host
+        user_host="$(MACHINES_FILE="$config_file" machines_get_ssh_user "$machine")@$(MACHINES_FILE="$config_file" machines_get_ip "$machine")"
+
+        echo "Checking Docker availability on $user_host..." >&2
+        if ssh_check_docker "$user_host"; then
+            echo "✓ Docker is running on $user_host" >&2
+        else
+            echo "✗ Docker is not available on $user_host" >&2
+            failed=1
+        fi
+    done
+
+    if [[ $failed -eq 0 ]]; then
+        echo "All Docker availability checks passed" >&2
+        return 0
+    else
+        echo "One or more Docker availability checks failed" >&2
+        return 1
+    fi
+}
+
+# Function: run_preflight_checks
+# Description: Run comprehensive pre-flight validation checks
+# Arguments: $1 - config file path
+# Returns: 0 if all checks pass, 1 if any fail
+run_preflight_checks() {
+    local config_file="$1"
+    local failed=0
+
+    echo "=== Running Pre-flight Validation Checks ===" >&2
+
+    # 1. Validate configuration file
+    if ! validate_config_file "$config_file"; then
+        failed=1
+    fi
+
+    # 2. Check SSH connectivity (only if config is valid)
+    if [[ $failed -eq 0 ]] && ! validate_ssh_connectivity "$config_file"; then
+        failed=1
+    fi
+
+    # 3. Check Docker availability (only if SSH works)
+    if [[ $failed -eq 0 ]] && ! validate_docker_availability "$config_file"; then
+        failed=1
+    fi
+
+    if [[ $failed -eq 0 ]]; then
+        echo "=== All Pre-flight Validation Checks Passed ===" >&2
+        return 0
+    else
+        echo "=== Pre-flight Validation Failed ===" >&2
+        return 1
+    fi
+}
+
 get_manager_machine() {
     local config_file="${1:-machines.yaml}"
 
