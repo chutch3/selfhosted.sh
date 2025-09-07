@@ -186,6 +186,31 @@ create_dns_zone() {
     fi
 }
 
+# Function to create _acme-challenge conditional forwarder for Let's Encrypt
+create_acme_challenge_forwarder() {
+    local domain="${BASE_DOMAIN:-diyhub.dev}"
+    local acme_zone="_acme-challenge.${domain}"
+
+    log "Creating _acme-challenge forwarder: $acme_zone"
+
+    local response
+    response=$(curl -s -X POST "$DNS_SERVER_URL/api/zones/create" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "token=${DNS_TOKEN}" \
+        -d "zone=${acme_zone}" \
+        -d "type=Forwarder" \
+        -d "forwarder=dan.ns.cloudflare.com")
+
+    if [[ "$response" == *'"status":"ok"'* ]]; then
+        log "✓ Created _acme-challenge forwarder for Let's Encrypt DNS validation"
+    elif [[ "$response" == *"already exists"* ]]; then
+        log "_acme-challenge forwarder already exists: $acme_zone"
+    else
+        log_warn "Failed to create _acme-challenge forwarder: $acme_zone"
+        log_warn "Response: $response"
+    fi
+}
+
 # Wait for DNS server to be ready
 wait_for_dns_server() {
     local retries=30
@@ -247,6 +272,20 @@ register_machine_dns_records() {
 
         add_a_record "$machine_key" "$machine_ip"
     done
+}
+
+# Register DNS server A record pointing to manager IP
+register_dns_server_record() {
+    log "Registering DNS server A record..."
+
+    # Get manager machine IP
+    local manager_ip
+    if ! manager_ip=$(machines_get_ip "manager"); then
+        log_error "Could not resolve IP for manager machine"
+        return 1
+    fi
+
+    add_a_record "dns" "$manager_ip"
 }
 
 # Discover domain names from Traefik labels in docker-compose files
@@ -313,8 +352,8 @@ configure_dns_records() {
 
     log "Registering DNS records as per simplified flow:"
     log "  - Machine hostnames → their IPs"
+    log "  - DNS server hostname → manager IP"
     log "  - Service hostnames → manager IP (where reverse proxy runs)"
-    log "  - NAS hostname → NAS IP"
 
     # Get authentication token
     log "Getting DNS authentication token..."
@@ -327,8 +366,14 @@ configure_dns_records() {
     # Create base zone (after we have the token)
     create_dns_zone
 
+    # Create _acme-challenge forwarder for Let's Encrypt DNS validation
+    create_acme_challenge_forwarder
+
     # Register machine hostnames to their IPs
     register_machine_dns_records
+
+    # Register DNS server A record pointing to manager
+    register_dns_server_record
 
     # Register service hostnames to manager (via CNAME)
     register_service_cnames

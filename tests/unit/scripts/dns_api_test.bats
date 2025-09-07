@@ -182,6 +182,32 @@ mock_curl() {
     [[ "$output" == *"nas"* ]]
 }
 
+@test "register_dns_server_record should add A record for DNS server pointing to manager IP" {
+    # Mock curl to capture API parameters
+    curl() {
+        if [[ "$*" == *"zones/records/get"* ]]; then
+            echo '{"status":"ok","response":{"records":[]}}'
+        elif [[ "$*" == *"zones/records/add"* ]]; then
+            echo "$*" > "${TEST_TEMP_DIR}/captured_params"
+            mock_curl "$@"
+        else
+            mock_curl "$@"
+        fi
+    }
+    export -f curl mock_curl
+    export DNS_TOKEN="mock-token-12345"
+
+    run register_dns_server_record
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Added A record: dns.diyhub.dev -> 192.168.1.100"* ]]
+
+    # Verify correct API parameters
+    local captured_params="$(cat "${TEST_TEMP_DIR}/captured_params")"
+    [[ "$captured_params" == *"domain=dns.diyhub.dev"* ]]
+    [[ "$captured_params" == *"zone=diyhub.dev"* ]]
+    [[ "$captured_params" == *"ipAddress=192.168.1.100"* ]]
+}
+
 @test "register_service_cnames should use discovered Traefik domains instead of hardcoded list" {
     # Override with realistic machines.yaml - no machine called "manager"
     export BASE_DOMAIN="testlab.local"
@@ -490,4 +516,46 @@ EOF
     echo "data_payload: $data_payload"
 
     [ "$data_payload" = "user=admin&pass=foo%23bar%26baz%3Dqux" ]
+}
+
+@test "create_acme_challenge_forwarder creates conditional forwarder for _acme-challenge" {
+    # Mock successful API responses for forwarder creation
+    function curl() {
+        # Check if this is a zones/create API call
+        if [[ "$*" == *"/api/zones/create"* ]]; then
+            # Check if it contains the expected parameters
+            if [[ "$*" == *"zone=_acme-challenge.${BASE_DOMAIN}"* ]] && [[ "$*" == *"type=Forwarder"* ]]; then
+                echo '{"response":{"domain":"_acme-challenge.'${BASE_DOMAIN}'"},"status":"ok"}'
+                return 0
+            fi
+        fi
+        echo '{"status":"error","errorMessage":"Unexpected call"}'
+        return 1
+    }
+    export -f curl
+    export DNS_TOKEN="test-token"
+
+    run create_acme_challenge_forwarder
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"✓ Created _acme-challenge forwarder for Let's Encrypt DNS validation"* ]]
+}
+
+@test "create_acme_challenge_forwarder handles existing forwarder" {
+    # Mock API response for existing forwarder
+    function curl() {
+        if [[ "$*" == *"/api/zones/create"* ]]; then
+            echo '{"status":"error","errorMessage":"Zone already exists."}'
+            return 0
+        fi
+        echo '{"status":"error","errorMessage":"Unexpected call"}'
+        return 1
+    }
+    export -f curl
+    export DNS_TOKEN="test-token"
+
+    run create_acme_challenge_forwarder
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"_acme-challenge forwarder already exists"* ]]
 }
