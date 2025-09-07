@@ -183,6 +183,9 @@ mock_curl() {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 60d498f (fix: fixed all remaining ssl and dns issues)
 @test "register_dns_server_record should add A record for DNS server pointing to manager IP" {
     # Mock curl to capture API parameters
     curl() {
@@ -209,8 +212,11 @@ mock_curl() {
     [[ "$captured_params" == *"ipAddress=192.168.1.100"* ]]
 }
 
+<<<<<<< HEAD
 =======
 >>>>>>> d6b7ac5 (fix: dns now works correctly)
+=======
+>>>>>>> 60d498f (fix: fixed all remaining ssl and dns issues)
 @test "register_service_cnames should use discovered Traefik domains instead of hardcoded list" {
     # Override with realistic machines.yaml - no machine called "manager"
     export BASE_DOMAIN="testlab.local"
