@@ -7,15 +7,15 @@ services:
         security_opt:
             - seccomp:unconfined
             - apparmor:unconfined
-        ports:
-            - "2342:2342"
+        # ports:
+        #     - "2342:2342"
         environment:
             PHOTOPRISM_ADMIN_USER: "admin"
             PHOTOPRISM_ADMIN_PASSWORD: "${PHOTOPRISM_ADMIN_PASSWORD}"
             PHOTOPRISM_AUTH_MODE: "password"
             PHOTOPRISM_SITE_URL: "https://photo.${BASE_DOMAIN}/"
-            PHOTOPRISM_DISABLE_TLS: "false"
-            PHOTOPRISM_DEFAULT_TLS: "false"
+            PHOTOPRISM_DISABLE_TLS: "true"
+            PHOTOPRISM_DEFAULT_TLS: "true"
             PHOTOPRISM_ORIGINALS_LIMIT: 5000
             PHOTOPRISM_HTTP_COMPRESSION: "gzip"
             PHOTOPRISM_LOG_LEVEL: "info"
@@ -44,11 +44,11 @@ services:
             PHOTOPRISM_FFMPEG_ENCODER: "nvidia"
             NVIDIA_VISIBLE_DEVICES: "all"
             NVIDIA_DRIVER_CAPABILITIES: "all"
-            PHOTOPRISM_INIT: "gpu tensorflow"
+            PHOTOPRISM_INIT: "tensorflow-gpu"
         working_dir: "/photoprism"
         volumes:
             - all_data:/photoprism/originals
-            - "./storage:/photoprism/storage"
+            - photoprism_storage:/photoprism/storage
         deploy:
             placement:
                 constraints:
@@ -60,6 +60,7 @@ services:
                 - "traefik.http.routers.photoprism.entrypoints=websecure"
                 - "traefik.http.routers.photoprism.tls.certresolver=dns"
                 - "traefik.http.services.photoprism.loadbalancer.server.port=2342"
+                - "traefik.http.services.photoprism.loadbalancer.server.scheme=http"
 
                 - homepage.group=Media
                 - homepage.name=PhotoPrism
@@ -93,7 +94,7 @@ services:
         command: --innodb-buffer-pool-size=512M --transaction-isolation=READ-COMMITTED --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --max-connections=512 --innodb-rollback-on-timeout=OFF --innodb-lock-wait-timeout=120
         ## Never store database files on an unreliable device such as a USB flash drive, an SD card, or a shared network folder:
         volumes:
-            - "./database:/var/lib/mysql" # DO NOT REMOVE
+            - photoprism_database:/var/lib/mysql
         ## See https://link.photoprism.app/mariadb-enviconment-variables:
         environment:
             MARIADB_AUTO_UPGRADE: "1"
@@ -106,6 +107,12 @@ services:
             # MARIADB_MASTER_HOST: ""
             # MARIADB_REPLICATION_USER: ""
             # MARIADB_REPLICATION_PASSWORD: ""
+        deploy:
+            replicas: 1
+            placement:
+                constraints:
+                    # Centralized database node for all databases
+                    - node.labels.database == true
         networks:
             - traefik-public
 
@@ -146,7 +153,7 @@ services:
             NVIDIA_VISIBLE_DEVICES: "all"
             NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
         volumes:
-            - "./ollama:/root/.ollama"
+            - photoprism_ollama:/root/.ollama
         # NVIDIA GPU Hardware Acceleration (see https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html):
         deploy:
             placement:
@@ -166,7 +173,8 @@ services:
             WATCHTOWER_POLL_INTERVAL: 7200 # checks for updates every 2 hours
         volumes:
             - "/var/run/docker.sock:/var/run/docker.sock"
-            - "~/.docker/config.json:/config.json" # optional, for authentication if you have a Docker Hub account
+            # Docker config removed - not needed for public images
+            # Add back if Docker Hub authentication needed: - "~/.docker/config.json:/config.json"
         networks:
             - traefik-public
 
@@ -179,5 +187,22 @@ volumes:
         driver: local
         driver_opts:
             type: "cifs"
-            o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},vers=3.0,nobrl,uid=0,gid=100,file_mode=0777,dir_mode=0777,ro"
+            o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},vers=3.0,nobrl,uid=0,gid=100,file_mode=0777,dir_mode=0777,ro,soft,actimeo=30"
             device: "//${NAS_SERVER}/all_data"
+    photoprism_database:
+        driver: local
+        # CRITICAL: Database volumes MUST be on local storage for performance
+        # Network storage (CIFS/NFS) causes severe performance degradation and timeouts
+        # This volume will be created on the node where mariadb is deployed
+    photoprism_storage:
+        driver: local
+        driver_opts:
+            type: "cifs"
+            o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},vers=3.0,nobrl,uid=${PUID},gid=${PGID},file_mode=0644,dir_mode=0770,soft,actimeo=30"
+            device: "//${NAS_SERVER}/photoprism_storage"
+    photoprism_ollama:
+        driver: local
+        driver_opts:
+            type: "cifs"
+            o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},vers=3.0,nobrl,uid=${PUID},gid=${PGID},file_mode=0644,dir_mode=0770,soft,actimeo=30"
+            device: "//${NAS_SERVER}/photoprism_ollama"

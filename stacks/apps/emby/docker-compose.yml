@@ -40,11 +40,11 @@ volumes:
         driver: local
         driver_opts:
             type: "cifs"
-            o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},vers=3.0,file_mode=0600,dir_mode=0770"
+            o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},vers=3.0,file_mode=0600,dir_mode=0770,soft,actimeo=30"
             device: "//${NAS_SERVER}/all_data"
     emby:
         driver: local
         driver_opts:
             type: "cifs"
-            o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},nobrl,vers=3.0,uid=0,gid=100,file_mode=0777,dir_mode=0777"
+            o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},nobrl,vers=3.0,uid=0,gid=100,file_mode=0777,dir_mode=0777,soft,actimeo=30"
             device: "//${NAS_SERVER}/emby"

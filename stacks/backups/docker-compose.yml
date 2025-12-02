@@ -1,0 +1,125 @@
+version: "3.9"
+
+# Database Backup Services
+# Runs automated backups of all databases to NAS storage
+# Databases use local volumes for performance, but backups are stored on NAS
+
+services:
+    # PhotoPrism MariaDB Backup
+    photoprism-db-backup:
+        image: mariadb:11
+        networks:
+            - traefik-public
+        environment:
+            # Backup configuration
+            MYSQL_HOST: photoprism_mariadb
+            MYSQL_DATABASE: photoprism
+            MYSQL_USER: photoprism
+            MYSQL_PASSWORD: ${PHOTOPRISM_DB_PASSWORD}
+            BACKUP_SCHEDULE: "0 2 * * *"  # 2 AM daily
+            BACKUP_RETENTION_DAYS: 30
+        volumes:
+            - db_backups:/backups
+            - ./scripts/backup-mariadb.sh:/backup.sh:ro
+        command: >
+            bash -c "
+            while true; do
+                echo '[$(date)] Starting PhotoPrism MariaDB backup...'
+                mysqldump -h photoprism_mariadb -u photoprism -p${PHOTOPRISM_DB_PASSWORD} photoprism | gzip > /backups/photoprism_$(date +%Y%m%d_%H%M%S).sql.gz
+
+                # Keep only last 30 days
+                find /backups -name 'photoprism_*.sql.gz' -mtime +30 -delete
+
+                echo '[$(date)] Backup complete. Next backup in 24 hours.'
+                sleep 86400
+            done
+            "
+        deploy:
+            replicas: 1
+            placement:
+                constraints:
+                    # Run on same node as the database for local volume access
+                    - node.labels.database == true
+            restart_policy:
+                condition: on-failure
+                delay: 5s
+
+    # LibreChat MongoDB Backup
+    librechat-mongodb-backup:
+        image: mongo:latest
+        networks:
+            - traefik-public
+        environment:
+            BACKUP_SCHEDULE: "0 3 * * *"  # 3 AM daily
+            BACKUP_RETENTION_DAYS: 30
+        volumes:
+            - db_backups:/backups
+        command: >
+            bash -c "
+            while true; do
+                echo '[$(date)] Starting LibreChat MongoDB backup...'
+                mongodump --host=librechat_mongodb --archive=/backups/librechat_mongodb_$(date +%Y%m%d_%H%M%S).archive --gzip
+
+                # Keep only last 30 days
+                find /backups -name 'librechat_mongodb_*.archive' -mtime +30 -delete
+
+                echo '[$(date)] Backup complete. Next backup in 24 hours.'
+                sleep 86400
+            done
+            "
+        deploy:
+            replicas: 1
+            placement:
+                constraints:
+                    - node.labels.database == true
+            restart_policy:
+                condition: on-failure
+                delay: 5s
+
+    # LibreChat PostgreSQL (vectordb) Backup
+    librechat-vectordb-backup:
+        image: ankane/pgvector:latest
+        networks:
+            - traefik-public
+        environment:
+            PGHOST: librechat_vectordb
+            PGUSER: myuser
+            PGPASSWORD: ${POSTGRES_PASSWORD}
+            PGDATABASE: mydatabase
+            BACKUP_RETENTION_DAYS: 30
+        volumes:
+            - db_backups:/backups
+        command: >
+            bash -c "
+            while true; do
+                echo '[$(date)] Starting LibreChat VectorDB backup...'
+                pg_dump -h librechat_vectordb -U myuser mydatabase | gzip > /backups/librechat_vectordb_$(date +%Y%m%d_%H%M%S).sql.gz
+
+                # Keep only last 30 days
+                find /backups -name 'librechat_vectordb_*.sql.gz' -mtime +30 -delete
+
+                echo '[$(date)] Backup complete. Next backup in 24 hours.'
+                sleep 86400
+            done
+            "
+        deploy:
+            replicas: 1
+            placement:
+                constraints:
+                    - node.labels.database == true
+            restart_policy:
+                condition: on-failure
+                delay: 5s
+
+networks:
+    traefik-public:
+        external: true
+
+volumes:
+    # Backup storage on NAS
+    db_backups:
+        driver: local
+        driver_opts:
+            type: "cifs"
+            o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},vers=3.0,nobrl,uid=0,gid=100,file_mode=0600,dir_mode=0770,soft,actimeo=30"
+            device: "//${NAS_SERVER}/db_backups"
