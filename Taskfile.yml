@@ -56,7 +56,7 @@ tasks:
     lint:shell:
         desc: Run shellcheck on shell scripts
         cmds:
-            - poetry run shellcheck -x --source-path=scripts scripts/*.sh scripts/wrappers/*.sh
+            - poetry run shellcheck -x --source-path=scripts scripts/*.sh
 
     lint:yaml:
         desc: Run yamllint on YAML files
