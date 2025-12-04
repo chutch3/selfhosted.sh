@@ -35,12 +35,32 @@ prompt() {
     local default="${3:-}"
 
     if [ -n "$default" ]; then
-        read -p "$prompt_text [$default]: " value
+        read -r -p "$prompt_text [$default]: " value
         eval "$var_name=\"${value:-$default}\""
     else
-        read -p "$prompt_text: " value
+        read -r -p "$prompt_text: " value
         eval "$var_name=\"$value\""
     fi
+}
+
+# ==============================================================================
+# Usage and Help
+# ==============================================================================
+
+usage() {
+    cat << EOF
+Usage: $0 [COMMAND]
+
+Commands:
+    setup     Initial setup of NAS for Kiwix downloads (default)
+    update    Update zim-manager.sh script on NAS
+
+Examples:
+    $0              # Run initial setup
+    $0 setup        # Run initial setup (explicit)
+    $0 update       # Update zim-manager.sh on NAS
+EOF
+    exit 1
 }
 
 # ==============================================================================
@@ -49,7 +69,8 @@ prompt() {
 
 load_environment() {
     # Load environment variables and dependencies
-    # Sources .env for NAS_SERVER, SSH_KEY_FILE configuration
+    # Sources .env for SSH_KEY_FILE configuration
+    # Sources machine.sh for NAS discovery from machines.yaml
     # Sources ssh.sh for SSH helper functions
     if [ -f "$PROJECT_ROOT/.env" ]; then
         set -a  # Export all variables
@@ -58,30 +79,41 @@ load_environment() {
         log_info "Loaded environment from .env"
     fi
 
-    # Source common SSH library
-    if [ -f "$PROJECT_ROOT/scripts/common/ssh.sh" ]; then
-        source "$PROJECT_ROOT/scripts/common/ssh.sh"
-        log_info "Loaded SSH library"
+    # Source common machine library (includes ssh.sh)
+    if [ -f "$PROJECT_ROOT/scripts/common/machine.sh" ]; then
+        source "$PROJECT_ROOT/scripts/common/machine.sh"
+        log_info "Loaded machine library"
     else
-        log_error "Could not find scripts/common/ssh.sh"
+        log_error "Could not find scripts/common/machine.sh"
         log_error "Please ensure you're running this from the project directory"
         exit 1
     fi
 }
 
 get_nas_connection_info() {
-    # Gather NAS connection credentials
-    # Uses NAS_SERVER and SSH_KEY_FILE from .env if available
-    # Otherwise prompts user with sensible defaults
+    # Gather NAS connection credentials from machines.yaml
+    # Falls back to prompts if machines.yaml not available
     # Exports NAS_USER_HOST for use by SSH functions
     log_info "Gathering NAS connection information..."
 
-    # Use NAS_SERVER from .env if available, otherwise prompt
-    if [ -z "${NAS_SERVER:-}" ]; then
-        prompt NAS_SERVER "NAS hostname or IP" "nas.local"
-        log_warn "Consider adding NAS_SERVER=$NAS_SERVER to .env file"
+    # Get NAS IP from machines.yaml
+    local nas_ip
+    if nas_ip=$(machines_get_ip "nas" 2>/dev/null); then
+        NAS_SERVER="$nas_ip"
+        log_info "Using NAS from machines.yaml: $NAS_SERVER"
     else
-        log_info "Using NAS_SERVER from .env: $NAS_SERVER"
+        log_warn "Could not find NAS in machines.yaml, prompting..."
+        prompt NAS_SERVER "NAS hostname or IP" "nas.local"
+    fi
+
+    # Get NAS SSH user from machines.yaml
+    local nas_user
+    if nas_user=$(machines_get_ssh_user "nas" 2>/dev/null) && [ "$nas_user" != "null" ]; then
+        NAS_USER="$nas_user"
+        log_info "Using NAS user from machines.yaml: $NAS_USER"
+    else
+        log_warn "Could not find NAS SSH user in machines.yaml, prompting..."
+        prompt NAS_USER "SSH username for NAS" "root"
     fi
 
     # Use SSH_KEY_FILE from .env if available, otherwise prompt
@@ -92,12 +124,9 @@ get_nas_connection_info() {
         log_info "Using SSH_KEY_FILE from .env: $SSH_KEY_FILE"
     fi
 
-    # Prompt for SSH user (typically root for NAS)
-    prompt NAS_USER "SSH username for NAS" "root"
-
     # Build user@host string for SSH commands
     NAS_USER_HOST="$NAS_USER@$NAS_SERVER"
-    export NAS_USER_HOST
+    export NAS_USER_HOST NAS_SERVER NAS_USER
 }
 
 ensure_ssh_connectivity() {
@@ -199,13 +228,15 @@ EOF"
 setup_update_schedule() {
     log_info "Setting up monthly scheduled task in OpenMediaVault..."
 
-    # Generate UUID for the cron job (using kernel's random UUID generator)
-    local cron_uuid=$(ssh_execute "$NAS_USER_HOST" "cat /proc/sys/kernel/random/uuid")
+    # Get the OMV sentinel UUID for new objects
+    # This signals to OMV to auto-generate a unique UUID for the cron job
+    local omv_new_uuid
+    omv_new_uuid=$(ssh_execute "$NAS_USER_HOST" ". /etc/default/openmediavault && echo \$OMV_CONFIGOBJECT_NEW_UUID")
 
     # Create scheduled task using omv-rpc
-    # FINAL FIX: Using the structure captured from the network payload.
+    # Using OMV_CONFIGOBJECT_NEW_UUID sentinel tells OMV to create a new object with auto-generated UUID
     ssh_execute "$NAS_USER_HOST" "omv-rpc -u admin Cron set '{
-      \"uuid\": \"fa4b1c66-ef79-11e5-87a0-0002b3a176b4\",
+      \"uuid\": \"$omv_new_uuid\",
       \"enable\": true,
       \"type\": \"userdefined\",
       \"execution\": \"monthly\",
@@ -244,7 +275,7 @@ verify_email_system() {
 
 offer_initial_download() {
     echo
-    read -p "Run initial download of starter pack now? (y/N): " run_init
+    read -r -p "Run initial download of starter pack now? (y/N): " run_init
 
     if [[ "$run_init" =~ ^[Yy]$ ]]; then
         log_info "Starting initial download (this will take a while for 100GB+ of data)..."
@@ -267,7 +298,7 @@ offer_initial_download() {
 # Main Function
 # ==============================================================================
 
-main() {
+cmd_setup() {
     echo "========================================="
     echo "  Kiwix NAS Setup"
     echo "========================================="
@@ -308,6 +339,71 @@ main() {
     echo
 
     exit 0
+}
+
+cmd_update() {
+    echo "========================================="
+    echo "  Update zim-manager.sh on NAS"
+    echo "========================================="
+    echo
+
+    load_environment
+    get_nas_connection_info
+    ensure_ssh_connectivity
+
+    log_info "Updating zim-manager.sh on NAS..."
+
+    # Backup existing script
+    if ! ssh -i "$SSH_KEY_FILE" "$NAS_USER_HOST" "cp /usr/local/bin/zim-manager.sh /usr/local/bin/zim-manager.sh.backup-\$(date +%Y%m%d-%H%M%S)" 2>/dev/null; then
+        log_warn "Could not backup existing script (it may not exist yet)"
+    fi
+
+    # Copy new version directly
+    if ! scp -i "$SSH_KEY_FILE" "$ZIM_MANAGER_SCRIPT" "$NAS_USER_HOST:/usr/local/bin/zim-manager.sh" 2>&1; then
+        log_error "Failed to copy zim-manager.sh"
+        exit 1
+    fi
+
+    # Make executable
+    if ! ssh -i "$SSH_KEY_FILE" "$NAS_USER_HOST" "chmod +x /usr/local/bin/zim-manager.sh" 2>/dev/null; then
+        log_error "Failed to make script executable"
+        exit 1
+    fi
+
+    log_info "✓ zim-manager.sh updated successfully"
+
+    # Show version info if available
+    echo
+    log_info "Verifying installation..."
+    ssh -i "$SSH_KEY_FILE" "$NAS_USER_HOST" "head -5 /usr/local/bin/zim-manager.sh | grep -E '^# (Kiwix|Last updated)'"
+
+    echo
+    echo "========================================="
+    echo "  Update Complete!"
+    echo "========================================="
+    echo
+
+    exit 0
+}
+
+main() {
+    local command="${1:-setup}"
+
+    case "$command" in
+        setup)
+            cmd_setup
+            ;;
+        update)
+            cmd_update
+            ;;
+        -h|--help|help)
+            usage
+            ;;
+        *)
+            log_error "Unknown command: $command"
+            usage
+            ;;
+    esac
 }
 
 # ==============================================================================

@@ -25,16 +25,22 @@ cmd_mv() { mv "$@"; }
 cmd_rm() { rm "$@"; }
 cmd_date() { date "$@"; }
 
-# Starter pack content
+# Starter pack content - includes tech resources and emergency preparedness content
 # NOTE: Update these URLs periodically to get the latest versions
 # Check https://download.kiwix.org/zim/ for current versions
-# Last updated: 2025-12-03
+# Last updated: 2025-12-04
 declare -A STARTER_PACK=(
     ["wikipedia_en_nopic"]="wikipedia/wikipedia_en_all_nopic_2025-08.zim"
+    ["gutenberg_en"]="gutenberg/gutenberg_en_all_2025-11.zim"
     ["medicine"]="wikipedia/wikipedia_en_medicine_nopic_2025-10.zim"
     ["stackoverflow"]="stack_exchange/stackoverflow.com_en_all_2023-11.zim"
-    ["wikivoyage"]="wikivoyage/wikivoyage_en_all_nopic_2025-09.zim"
     ["freecodecamp"]="freecodecamp/freecodecamp_en_all_2025-11.zim"
+    ["openstreetmap_wiki"]="other/openstreetmap-wiki_en_all_nopic_2025-07.zim"
+    ["gardening"]="stack_exchange/gardening.stackexchange.com_en_all_2025-10.zim"
+    ["diy"]="stack_exchange/diy.stackexchange.com_en_all_2025-08.zim"
+    ["cooking"]="stack_exchange/cooking.stackexchange.com_en_all_2025-07.zim"
+    ["sustainability"]="stack_exchange/sustainability.stackexchange.com_en_all_2025-10.zim"
+    ["wikivoyage"]="wikivoyage/wikivoyage_en_all_nopic_2025-09.zim"
 )
 
 LOG_FILE="${LOG_FILE:-$ZIM_LOG_DIR/zim-manager-$(date +%Y-%m-%d_%H-%M-%S).log}"
@@ -122,7 +128,8 @@ download_with_verify() {
 check_for_updates() {
     log "Checking for ZIM file updates..."
 
-    local current_files=$(ls -1 "$ZIM_DATA_DIR"/*.zim 2>/dev/null || true)
+    local current_files
+    current_files=$(ls -1 "$ZIM_DATA_DIR"/*.zim 2>/dev/null || true)
     local updates_available=0
 
     if [ -z "$current_files" ]; then
@@ -136,7 +143,8 @@ check_for_updates() {
     # TODO: Implement actual update checking by comparing dates/versions
     # For now, just report current state
 
-    local report="Kiwix Update Check - $(date)
+    local report
+    report="Kiwix Update Check - $(date)
 
 Current ZIM Files:
 $current_files
@@ -164,7 +172,6 @@ download_starter_pack() {
         local path="${STARTER_PACK[$name]}"
         # Get latest version by fetching directory listing
         # This is simplified - real implementation would parse HTML/JSON
-        local filename=$(basename "$path")
         local url="$DOWNLOAD_SOURCE/$path"
 
         log "Downloading $name..."

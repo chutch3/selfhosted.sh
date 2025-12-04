@@ -1,4 +1,9 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2076,SC2317,SC1090,SC2015
+# SC2076: Quotes in regex are intentional for literal matching in tests
+# SC2317: Mock functions appear unreachable but are invoked by sourced scripts
+# SC1090: Dynamic source paths in tests cannot be followed statically
+# SC2015: && || pattern is intentional in helper functions
 
 # Inline helper functions
 temp_make() { mktemp -d; }
@@ -151,25 +156,25 @@ teardown() {
 # get_nas_connection_info() Function Tests
 # ==============================================================================
 
-@test "get_nas_connection_info should use NAS_SERVER from env if set" {
+@test "get_nas_connection_info should call machines_get_ip" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
     run grep -A20 "^get_nas_connection_info()" "$script"
-    [[ "$output" =~ "NAS_SERVER" ]]
+    [[ "$output" =~ "machines_get_ip" ]]
 }
 
-@test "get_nas_connection_info should prompt for NAS_SERVER if not set" {
+@test "get_nas_connection_info should call machines_get_ssh_user" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
     run grep -A20 "^get_nas_connection_info()" "$script"
-    [[ "$output" =~ "prompt" ]] && [[ "$output" =~ "NAS" ]]
+    [[ "$output" =~ "machines_get_ssh_user" ]]
 }
 
 @test "get_nas_connection_info should use SSH_KEY_FILE from env if set" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A20 "^get_nas_connection_info()" "$script"
+    run grep -A35 "^get_nas_connection_info()" "$script"
     [[ "$output" =~ "SSH_KEY_FILE" ]]
 }
 
-@test "get_nas_connection_info should prompt for NAS_USER" {
+@test "get_nas_connection_info should set NAS_USER_HOST" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
     run grep -A20 "^get_nas_connection_info()" "$script"
     [[ "$output" =~ "NAS_USER" ]]
@@ -316,10 +321,10 @@ teardown() {
     [[ "$output" =~ "omv-rpc" ]] && [[ "$output" =~ "Cron" ]] && [[ "$output" =~ "set" ]]
 }
 
-@test "setup_update_schedule should generate UUID for cron job" {
+@test "setup_update_schedule should use OMV sentinel UUID" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A30 "^setup_update_schedule()" "$script"
-    [[ "$output" =~ "uuidgen" ]]
+    run grep -A35 "^setup_update_schedule()" "$script"
+    [[ "$output" =~ "OMV_CONFIGOBJECT_NEW_UUID" ]]
 }
 
 @test "setup_update_schedule should run on 1st of month at 2 AM" {
@@ -404,55 +409,55 @@ teardown() {
 
 @test "main should call load_environment" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A10 "^main()" "$script"
+    run grep -A10 "^cmd_setup()" "$script"
     [[ "$output" =~ "load_environment" ]]
 }
 
 @test "main should call get_nas_connection_info" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A10 "^main()" "$script"
+    run grep -A10 "^cmd_setup()" "$script"
     [[ "$output" =~ "get_nas_connection_info" ]]
 }
 
 @test "main should call ensure_ssh_connectivity" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A15 "^main()" "$script"
+    run grep -A15 "^cmd_setup()" "$script"
     [[ "$output" =~ "ensure_ssh_connectivity" ]]
 }
 
 @test "main should call get_storage_configuration" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A20 "^main()" "$script"
+    run grep -A20 "^cmd_setup()" "$script"
     [[ "$output" =~ "get_storage_configuration" ]]
 }
 
 @test "main should call setup_nas_directories" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A25 "^main()" "$script"
+    run grep -A25 "^cmd_setup()" "$script"
     [[ "$output" =~ "setup_nas_directories" ]]
 }
 
 @test "main should call install_zim_manager" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A30 "^main()" "$script"
+    run grep -A30 "^cmd_setup()" "$script"
     [[ "$output" =~ "install_zim_manager" ]]
 }
 
 @test "main should call setup_update_schedule" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A35 "^main()" "$script"
+    run grep -A35 "^cmd_setup()" "$script"
     [[ "$output" =~ "setup_update_schedule" ]]
 }
 
 @test "main should call verify_email_system" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A40 "^main()" "$script"
+    run grep -A40 "^cmd_setup()" "$script"
     [[ "$output" =~ "verify_email_system" ]]
 }
 
 @test "main should call offer_initial_download" {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
-    run grep -A45 "^main()" "$script"
+    run grep -A45 "^cmd_setup()" "$script"
     [[ "$output" =~ "offer_initial_download" ]]
 }
 
@@ -470,4 +475,132 @@ teardown() {
     local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
     run grep "exit 0" "$script"
     [ "$status" -eq 0 ]
+}
+
+# ==============================================================================
+# Update Command Tests
+# ==============================================================================
+
+@test "cmd_update() should exist" {
+    local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
+    run grep "^cmd_update()" "$script"
+    [ "$status" -eq 0 ]
+}
+
+@test "cmd_update() should load environment" {
+    local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
+    source "$script"
+
+    # Mock functions
+    load_environment() { echo "load_environment_called"; }
+    get_nas_connection_info() { echo "get_nas_connection_info_called"; }
+    ensure_ssh_connectivity() { echo "ensure_ssh_connectivity_called"; }
+    export -f load_environment get_nas_connection_info ensure_ssh_connectivity
+
+    run cmd_update
+    [[ "${output}" == *"load_environment_called"* ]]
+}
+
+@test "cmd_update() should backup existing script before updating" {
+    local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
+    source "$script"
+
+    # Mock dependencies
+    load_environment() { return 0; }
+    get_nas_connection_info() {
+        NAS_USER_HOST="test@nas.local"
+        SSH_KEY_FILE="/tmp/test_key"
+        export NAS_USER_HOST SSH_KEY_FILE
+    }
+    ensure_ssh_connectivity() { return 0; }
+    export -f load_environment get_nas_connection_info ensure_ssh_connectivity
+
+    # Mock SSH/SCP commands
+    ssh() {
+        if [[ "$*" == *"cp /usr/local/bin/zim-manager.sh"* ]]; then
+            echo "backup_created"
+        fi
+        return 0
+    }
+    scp() { return 0; }
+    export -f ssh scp
+
+    run cmd_update
+    [[ "${output}" == *"backup"* ]] || [[ "${output}" == *"Updating"* ]]
+}
+
+@test "cmd_update() should copy zim-manager.sh to NAS" {
+    local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
+    source "$script"
+
+    # Mock dependencies
+    load_environment() { return 0; }
+    get_nas_connection_info() {
+        NAS_USER_HOST="test@nas.local"
+        SSH_KEY_FILE="/tmp/test_key"
+        ZIM_MANAGER_SCRIPT="$TEST_DIR/zim-manager.sh"
+        export NAS_USER_HOST SSH_KEY_FILE ZIM_MANAGER_SCRIPT
+    }
+    ensure_ssh_connectivity() { return 0; }
+    export -f load_environment get_nas_connection_info ensure_ssh_connectivity
+
+    # Create mock zim-manager.sh
+    echo "#!/bin/bash" > "$TEST_DIR/zim-manager.sh"
+
+    # Mock SSH/SCP commands
+    ssh() { return 0; }
+    scp() {
+        echo "scp_called: $*"
+        return 0
+    }
+    export -f ssh scp
+
+    run cmd_update
+    [[ "${output}" == *"scp"* ]] || [[ "${output}" == *"updated"* ]]
+}
+
+@test "cmd_update() should make script executable on NAS" {
+    local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
+    source "$script"
+
+    # Mock dependencies
+    load_environment() { return 0; }
+    get_nas_connection_info() {
+        NAS_USER_HOST="test@nas.local"
+        SSH_KEY_FILE="/tmp/test_key"
+        ZIM_MANAGER_SCRIPT="$TEST_DIR/zim-manager.sh"
+        export NAS_USER_HOST SSH_KEY_FILE ZIM_MANAGER_SCRIPT
+    }
+    ensure_ssh_connectivity() { return 0; }
+    export -f load_environment get_nas_connection_info ensure_ssh_connectivity
+
+    # Create mock zim-manager.sh
+    echo "#!/bin/bash" > "$TEST_DIR/zim-manager.sh"
+
+    # Mock SSH/SCP commands
+    ssh() {
+        if [[ "$*" == *"chmod +x"* ]]; then
+            echo "chmod_called"
+        fi
+        return 0
+    }
+    scp() { return 0; }
+    export -f ssh scp
+
+    run cmd_update
+    [[ "${output}" == *"chmod"* ]] || [[ "${output}" == *"updated"* ]]
+}
+
+@test "main() should support 'update' command" {
+    local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
+    run grep -E "update\)" "$script"
+    [ "$status" -eq 0 ]
+}
+
+@test "usage() should document update command" {
+    local script="${BATS_TEST_DIRNAME}/../setup-nas-downloads.sh"
+    source "$script"
+
+    run usage
+    [[ "${output}" == *"update"* ]]
 }

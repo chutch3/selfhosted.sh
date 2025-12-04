@@ -1,4 +1,9 @@
 #!/usr/bin/env bats
+# shellcheck disable=SC2076,SC2317,SC2155,SC1091
+# SC2076: Quotes in regex are intentional for literal matching in tests
+# SC2317: Mock functions appear unreachable but are invoked by sourced scripts
+# SC2155: Declare and assign on same line is acceptable in tests for readability
+# SC1091: Sourced file path is relative and verified at runtime
 
 # ==============================================================================
 # Test Setup and Helpers
@@ -121,7 +126,7 @@ teardown() {
 @test "send_email() should call cmd_mail when mail command exists" {
     # Mock cmd_mail to track calls
     cmd_mail() {
-        echo "$@" > "$TEST_DIR/mail_args.txt"
+        echo "$*" > "$TEST_DIR/mail_args.txt"
         return 0
     }
     export -f cmd_mail
@@ -176,7 +181,7 @@ teardown() {
     cmd_wget() {
         # Capture first call (main file download)
         if [ ! -f "$TEST_DIR/wget_call.txt" ]; then
-            echo "wget called with: $@" > "$TEST_DIR/wget_call.txt"
+            echo "wget called with: $*" > "$TEST_DIR/wget_call.txt"
         fi
         # Create mock temp file
         touch "${3}" 2>/dev/null || true  # $3 is the output file from -O flag
@@ -232,7 +237,7 @@ teardown() {
         return 0
     }
     cmd_sed() {
-        echo "sed called: $@" > "$TEST_DIR/sed_call.txt"
+        echo "sed called: $*" > "$TEST_DIR/sed_call.txt"
         return 0
     }
     cmd_sha256sum() { return 0; }
@@ -289,7 +294,7 @@ teardown() {
     cmd_sed() { return 0; }
     cmd_sha256sum() { return 0; }
     cmd_mv() {
-        echo "mv $@" > "$TEST_DIR/mv_call.txt"
+        echo "mv $*" > "$TEST_DIR/mv_call.txt"
         return 0
     }
     cmd_rm() { return 0; }
@@ -311,7 +316,7 @@ teardown() {
     cmd_sed() { return 0; }
     cmd_sha256sum() { return 1; }  # Fail checksum
     cmd_rm() {
-        echo "rm $@" > "$TEST_DIR/rm_call.txt"
+        echo "rm $*" > "$TEST_DIR/rm_call.txt"
         return 0
     }
     export -f cmd_wget cmd_sed cmd_sha256sum cmd_rm

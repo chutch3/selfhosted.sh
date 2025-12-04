@@ -14,12 +14,18 @@ This deployment provides:
 
 ## Storage Requirements
 
-**Starter Pack (~120GB):**
+**Starter Pack (~330GB):**
 - English Wikipedia (no pictures): 50 GB
+- Project Gutenberg (60,000+ public domain books): 206 GB
 - WikiMed (medical encyclopedia): 10 GB
-- Stack Overflow: 50 GB
-- Wikivoyage: 5 GB
-- FreeCodeCamp: 5 GB
+- Stack Overflow (programming Q/A): 50 GB
+- FreeCodeCamp (coding tutorials): 5 GB
+- OpenStreetMap Wiki (mapping/navigation): 0.3 GB
+- Gardening Stack Exchange (growing food): 0.8 GB
+- DIY Stack Exchange (repairs/building): 1.8 GB
+- Cooking Stack Exchange (food prep): 0.2 GB
+- Sustainability Stack Exchange (self-sufficiency): 0.02 GB
+- Wikivoyage (travel guides): 5 GB
 
 **Full Deployment (~770GB):**
 - English Wikipedia (with images): 119 GB
@@ -32,9 +38,10 @@ This deployment provides:
 
 1. **OpenMediaVault NAS** (or any Linux system accessible via SSH)
 2. **Available Storage:** 500GB - 2TB on NAS
-3. **SSH Access:** SSH key authentication to NAS
-4. **Email System:** Mail command configured on NAS for notifications (optional)
-5. **Environment Variables:** SMB credentials configured in root `.env` file
+3. **NAS Configuration:** NAS defined in `machines.yaml` with role `storage`
+4. **SSH Access:** SSH key authentication to NAS
+5. **Email System:** Mail command configured on NAS for notifications (optional)
+6. **Environment Variables:** SMB credentials configured in root `.env` file
 
 ## Installation
 
@@ -59,11 +66,20 @@ This script will:
 9. Test email notifications
 10. Optionally start initial download of starter pack
 
-**Example prompts:**
+The script automatically discovers your NAS from `machines.yaml` (looks for machine with key "nas"). If not found in machines.yaml, it will prompt for connection details.
+
+**Example machines.yaml entry:**
+```yaml
+machines:
+  nas:
+    ip: 192.168.86.189
+    role: storage
+    ssh_user: cody
+    swarm_node: false
 ```
-NAS hostname or IP [nas.local]: 192.168.1.100
-SSH username for NAS [root]: admin
-SSH key path [~/.ssh/selfhosted_rsa]: ~/.ssh/id_rsa
+
+**Example prompts (if needed):**
+```
 ZIM data directory on NAS [/srv/kiwix_data]:
 Log directory on NAS [/var/log/kiwix]:
 Email address for notifications [admin@example.com]: you@example.com
@@ -128,8 +144,16 @@ TZ=America/New_York                    # Optional: Timezone for service
 SMB_USERNAME=your_nas_username
 SMB_PASSWORD=your_nas_password
 SMB_DOMAIN=WORKGROUP
-NAS_SERVER=192.168.1.100
+NAS_SERVER=192.168.86.189              # Must match NAS IP from machines.yaml
+
+# SSH configuration (optional - setup script uses machines.yaml)
+SSH_KEY_FILE=~/.ssh/selfhosted_rsa
 ```
+
+**Important:**
+- The setup scripts automatically discover NAS connection info from `machines.yaml`
+- `NAS_SERVER` in `.env` must match the IP in `machines.yaml` (used by docker-compose for CIFS mount)
+- SSH user is discovered from `machines.yaml`, no need to configure in `.env`
 
 ### Update Schedule
 
@@ -181,7 +205,15 @@ ssh admin@nas.local 'cat /var/log/kiwix/zim-manager-*.log'
 
 Browse available ZIM files at: https://download.kiwix.org/zim/
 
-Popular archives:
+**Prepper/Emergency Content:**
+- **OpenStreetMap Wiki:** `https://download.kiwix.org/zim/other/openstreetmap-wiki_en_all_nopic_2025-07.zim` (317 MB)
+- **Gardening Stack Exchange:** `https://download.kiwix.org/zim/stack_exchange/gardening.stackexchange.com_en_all_2025-10.zim` (839 MB)
+- **DIY Stack Exchange:** `https://download.kiwix.org/zim/stack_exchange/diy.stackexchange.com_en_all_2025-08.zim` (1.8 GB)
+- **Cooking Stack Exchange:** `https://download.kiwix.org/zim/stack_exchange/cooking.stackexchange.com_en_all_2025-07.zim` (202 MB)
+- **Sustainability Stack Exchange:** `https://download.kiwix.org/zim/stack_exchange/sustainability.stackexchange.com_en_all_2025-10.zim` (24 MB)
+- **Project Gutenberg (English):** `https://download.kiwix.org/zim/gutenberg/gutenberg_en_all_2025-11.zim` (206 GB - 60,000+ books readable in browser)
+
+**Popular Archives:**
 - **Wikipedia (all languages):** `https://download.kiwix.org/zim/wikipedia/`
 - **Stack Exchange (all sites):** `https://download.kiwix.org/zim/stack_exchange/`
 - **WikiMed (medical):** `https://download.kiwix.org/zim/other/wikimed_en_all_YYYY-MM.zim`
@@ -267,6 +299,23 @@ docker service update --force kiwix_kiwix
 
 ## Maintenance
 
+### Updating zim-manager.sh Script
+
+When the zim-manager.sh script is updated (e.g., new ZIM files added to STARTER_PACK), update it on your NAS:
+
+```bash
+cd stacks/apps/kiwix
+./setup-nas-downloads.sh update
+```
+
+This will:
+1. Backup the existing script on NAS
+2. Copy the new version from your local repo
+3. Make it executable
+4. Verify the installation
+
+The script automatically discovers your NAS from machines.yaml and uses SSH_KEY_FILE from your .env file.
+
 ### Updating ZIM Files
 
 When monthly update check notifies you of new versions:
@@ -302,7 +351,7 @@ ssh admin@nas.local 'du -h /srv/kiwix_data/*.zim | sort -hr'
 **Components:**
 - **Kiwix Server (Docker):** Serves ZIM files via web interface
 - **ZIM Manager (NAS):** Downloads and manages ZIM files on OpenMediaVault NAS
-- **Cron (NAS):** Monthly update checks
+- **Cron (NAS):** Monthly update checks (uses OMV's RPC API with sentinel UUID for idempotent cron job creation)
 - **CIFS Volume:** Read-only network mount for ZIM files
 
 **Data Flow:**
@@ -317,6 +366,57 @@ ssh admin@nas.local 'du -h /srv/kiwix_data/*.zim | sort -hr'
 - Downloads leverage NAS's network and storage
 - Read-only mount improves security
 - Simpler architecture than Docker sidecar approach
+
+## Scripts Reference
+
+### setup-nas-downloads.sh
+
+Setup and management script for Kiwix NAS configuration.
+
+**Commands:**
+```bash
+# Initial setup (interactive)
+./setup-nas-downloads.sh setup
+./setup-nas-downloads.sh          # Default command
+
+# Update zim-manager.sh on NAS
+./setup-nas-downloads.sh update
+
+# Show help
+./setup-nas-downloads.sh --help
+```
+
+**What it does:**
+- Discovers NAS from `machines.yaml` automatically
+- Sets up directories and configuration on NAS
+- Copies zim-manager.sh script to NAS
+- Configures cron job for monthly updates
+- Tests email notifications
+
+### zim-manager.sh (runs on NAS)
+
+ZIM file download and management script (runs on the NAS itself).
+
+**Commands:**
+```bash
+# Download starter pack (330GB)
+ssh root@nas 'zim-manager.sh init'
+
+# Check for available updates (sends email report)
+ssh root@nas 'zim-manager.sh check'
+
+# Download specific ZIM file
+ssh root@nas 'zim-manager.sh download <url>'
+```
+
+**Examples:**
+```bash
+# Download Project Gutenberg
+ssh root@nas 'zim-manager.sh download https://download.kiwix.org/zim/gutenberg/gutenberg_en_all_2025-11.zim'
+
+# Download Spanish Wikipedia
+ssh root@nas 'zim-manager.sh download https://download.kiwix.org/zim/wikipedia/wikipedia_es_all_nopic_2025-11.zim'
+```
 
 ## Resources
 
