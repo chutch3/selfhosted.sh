@@ -4,8 +4,6 @@ services:
   kiwix:
     image: ghcr.io/kiwix/kiwix-serve:latest
     environment:
-      - PUID=1000
-      - PGID=1000
       - TZ=${TZ:-UTC}
     volumes:
       - kiwix_data:/data:ro          # Read-only ZIM files
@@ -40,5 +38,5 @@ volumes:
     driver: local
     driver_opts:
       type: "cifs"
-      o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},vers=3.0,file_mode=0770,dir_mode=0770,uid=1000,gid=1000,ro,soft,actimeo=30"
+      o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},vers=3.0,file_mode=0770,dir_mode=0770,uid=1001,gid=1001,ro,soft,actimeo=30"
       device: "//${NAS_SERVER}/kiwix_data"
