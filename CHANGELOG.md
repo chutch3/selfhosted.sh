@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.30.1 (2026-09-07)
+
+### Bug Fixes
+
+- Address large file uploads for immich (e.g. large videos)
+  ([`dc466d8`](https://github.com/chutch3/homelab/commit/dc466d8e512fa3a5f25e5818e33dc131034b67ed))
+
+
 ## v3.30.0 (2026-08-31)
 
 ### Features
